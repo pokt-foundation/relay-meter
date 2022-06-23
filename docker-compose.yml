@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+    db:
+      ports:
+        - "28086:8086"
+      image: influxdb:2.0
+      volumes:
+        - ./testdata:/var/lib/influxdb2
+      environment:
+        DOCKER_INFLUXDB_INIT_MODE: setup
+        DOCKER_INFLUXDB_INIT_USERNAME: my-user
+        DOCKER_INFLUXDB_INIT_PASSWORD: my-password
+        DOCKER_INFLUXDB_INIT_ORG: my-org
+        DOCKER_INFLUXDB_INIT_BUCKET: my-bucket
+        DOCKER_INFLUXDB_INIT_RETENTION: 1m
+        DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: my-super-secret-auth-token
