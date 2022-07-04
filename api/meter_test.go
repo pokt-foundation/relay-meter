@@ -60,6 +60,27 @@ func TestAppRelays(t *testing.T) {
 				Count:       10,
 			},
 		},
+		{
+			name: "Equal values are allowed for From and To parameters (to cover a single day)",
+			app:  "app1",
+			from: now.AddDate(0, 0, -3),
+			to:   now.AddDate(0, 0, -3),
+			usageData: map[time.Time]map[string]int64{
+				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
+				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
+				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
+				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
+				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
+				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
+				now:                   {"app1": 1, "app2": 2},
+			},
+			expected: AppRelaysResponse{
+				Application: "app1",
+				From:        now.AddDate(0, 0, -3),
+				To:          now.AddDate(0, 0, -3),
+				Count:       2,
+			},
+		},
 	}
 
 	for _, tc := range testCases {
