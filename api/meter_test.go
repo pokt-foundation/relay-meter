@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,12 +13,13 @@ func TestAppRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
 
 	testCases := []struct {
-		name      string
-		app       string
-		from      time.Time
-		to        time.Time
-		usageData map[time.Time]map[string]int64
-		expected  AppRelaysResponse
+		name        string
+		app         string
+		from        time.Time
+		to          time.Time
+		usageData   map[time.Time]map[string]int64
+		expected    AppRelaysResponse
+		expectedErr error
 	}{
 		{
 			name: "Correct count is returned",
@@ -81,6 +84,18 @@ func TestAppRelays(t *testing.T) {
 				Count:       2,
 			},
 		},
+		{
+			name:        "Invalid timespan is rejected",
+			app:         "app1",
+			from:        now.AddDate(0, 0, -1),
+			to:          now.AddDate(0, 0, -2),
+			expectedErr: fmt.Errorf("Invalid timespan"),
+			expected: AppRelaysResponse{
+				Application: "app1",
+				From:        now.AddDate(0, 0, -1),
+				To:          now.AddDate(0, 0, -2),
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -92,7 +107,12 @@ func TestAppRelays(t *testing.T) {
 			relayMeter := relayMeter{Backend: &fakeBackend}
 			got, err := relayMeter.AppRelays(tc.app, tc.from, tc.to)
 			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
+				if tc.expectedErr == nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+				if !strings.Contains(err.Error(), tc.expectedErr.Error()) {
+					t.Fatalf("Expected error to contain: %q, got: %v", tc.expectedErr.Error(), err)
+				}
 			}
 
 			if diff := cmp.Diff(tc.expected, got); diff != "" {
