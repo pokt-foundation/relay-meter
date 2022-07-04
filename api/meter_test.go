@@ -38,12 +38,12 @@ func TestAppRelays(t *testing.T) {
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now.AddDate(0, 0, -5),
-				To:          now.AddDate(0, 0, -1),
+				To:          now,
 				Count:       10,
 			},
 		},
 		{
-			name: "From and To parameters are adjusted to start of day",
+			name: "From and To parameters are adjusted to start of the specifed day and the next day, respectively",
 			app:  "app1",
 			from: time.Now().AddDate(0, 0, -5),
 			to:   time.Now().AddDate(0, 0, -1),
@@ -59,7 +59,7 @@ func TestAppRelays(t *testing.T) {
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now.AddDate(0, 0, -5),
-				To:          now.AddDate(0, 0, -1),
+				To:          now,
 				Count:       10,
 			},
 		},
@@ -80,7 +80,7 @@ func TestAppRelays(t *testing.T) {
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now.AddDate(0, 0, -3),
-				To:          now.AddDate(0, 0, -3),
+				To:          now.AddDate(0, 0, -2),
 				Count:       2,
 			},
 		},

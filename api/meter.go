@@ -63,11 +63,12 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 		return resp, err
 	}
 
-	// TODO: adjust To
+	// TODO: adjust To parameter to the start of the next day
 	to, err = time.Parse(dayFormat, to.Format(dayFormat))
 	if err != nil {
 		return resp, err
 	}
+	to = to.AddDate(0, 0, 1)
 
 	// TODO: simple TTL: just query once everty 5 minutes
 	if err := r.loadData(from, to); err != nil {
@@ -76,7 +77,8 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 
 	var total int64
 	for day, counts := range r.dailyUsage {
-		if (day.After(from) || day.Equal(from)) && (day.Before(to) || day.Equal(to)) {
+		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
+		if (day.After(from) || day.Equal(from)) && day.Before(to) {
 			total += counts[app]
 		}
 	}
