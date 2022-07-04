@@ -52,8 +52,8 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 		To:          to,
 		Application: app,
 	}
-	if !from.Before(to) {
-		return resp, fmt.Errorf("Invalid timespan")
+	if !from.Before(to) && !from.Equal(to) {
+		return resp, fmt.Errorf("Invalid timespan: %v -- %v", from, to)
 	}
 
 	// TODO: enforce MaxArchiveAge on From parameter
