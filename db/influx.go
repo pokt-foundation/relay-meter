@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb-client-go/v2"
+
+	"github.com/adshmh/meter/api"
 )
 
 type Source interface {
@@ -34,26 +36,19 @@ type influxDB struct {
 	Options InfluxDBOptions
 }
 
-// startOfDay returns the time matching the start of the day of the input.
-//	timezone/location is maintained.
-func startOfDay(day time.Time) time.Time {
-	y, m, d := day.Date()
-	l := day.Location()
-
-	return time.Date(y, m, d, 0, 0, 0, 0, l)
-}
-
 // DailyCounts Returns total of number of daily relays per application, up to and including the specified day
 //	Each app will have an entry per day
 func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int64, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI("my-org")
 
-	dailyCounts := make(map[time.Time]map[string]int64)
 	// Loop on days
-	startDay := startOfDay(from)
-	endDay := startOfDay(to).Add(time.Nanosecond)
+	startDay, endDay, err := api.AdjustTimePeriod(from, to)
+	if err != nil {
+		return nil, err
+	}
 
+	dailyCounts := make(map[time.Time]map[string]int64)
 	// TODO: the influx doc seems to have a bug when describing the 'stop' parameter of range function,
 	//	i.e. it says "Results exclude rows with _time values that match the specified start time.", likely meant to say 'stop time'
 	//	https://docs.influxdata.com/flux/v0.x/stdlib/universe/range/

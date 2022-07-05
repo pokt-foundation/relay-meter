@@ -52,23 +52,13 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 		To:          to,
 		Application: app,
 	}
-	if !from.Before(to) && !from.Equal(to) {
-		return resp, fmt.Errorf("Invalid timespan: %v -- %v", from, to)
-	}
 
 	// TODO: enforce MaxArchiveAge on From parameter
 	// TODO: enforce Today as maximum value for To parameter
-	from, err := time.Parse(dayFormat, from.Format(dayFormat))
+	from, to, err := AdjustTimePeriod(from, to)
 	if err != nil {
 		return resp, err
 	}
-
-	// TODO: adjust To parameter to the start of the next day
-	to, err = time.Parse(dayFormat, to.Format(dayFormat))
-	if err != nil {
-		return resp, err
-	}
-	to = to.AddDate(0, 0, 1)
 
 	// TODO: simple TTL: just query once everty 5 minutes
 	if err := r.loadData(from, to); err != nil {
@@ -89,4 +79,24 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 
 	// TODO: Add current day's usage
 	return resp, nil
+}
+
+// AdjustTimePeriod sets the two parameters, i.e. from and to, according to the following rules:
+//	- From is adjusted to the start of the day that it originally specifies
+//	- To is adjusted to the start of the next day from the day it originally specifies
+func AdjustTimePeriod(from, to time.Time) (time.Time, time.Time, error) {
+	if !from.Before(to) && !from.Equal(to) {
+		return time.Time{}, time.Time{}, fmt.Errorf("Invalid timespan: %v -- %v", from, to)
+	}
+
+	from, err := time.Parse(dayFormat, from.Format(dayFormat))
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+
+	to, err = time.Parse(dayFormat, to.Format(dayFormat))
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return from, to.AddDate(0, 0, 1), nil
 }
