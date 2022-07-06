@@ -16,6 +16,8 @@ type Source interface {
 	AppRelays(from, to time.Time) (map[string]int64, error)
 	// UserRelays(period time.Duration) (map[string]int, error)
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]int64, error)
+	// Returns application metrics for today so far
+	TodaysCounts() (map[string]int64, error)
 }
 
 type InfluxDBOptions struct {
@@ -103,6 +105,56 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int
 	return dailyCounts, nil
 }
 
+func (i *influxDB) TodaysCounts() (map[string]int64, error) {
+	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
+	queryAPI := client.QueryAPI("my-org")
+
+	counts := make(map[string]int64)
+	// TODO: send queries in parallel
+	query := fmt.Sprintf("from(bucket: %q)", i.Options.CurrentBucket) +
+		fmt.Sprintf(" |> range(start: %d)", startOfDay(time.Now()).Unix()) +
+		fmt.Sprintf(" |> filter(fn: (r) => r._measurement == %q)", "relay") +
+		fmt.Sprintf(" |> group(columns: [%q])", "applicationPublicKey") +
+		" |> sum()"
+
+	result, err := queryAPI.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	// Iterate over query response
+	for result.Next() {
+		app, ok := result.Record().ValueByKey("applicationPublicKey").(string)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing application public key: %v", result.Record().ValueByKey("applicationPublicKey"))
+		}
+		// TODO: log a warning on empty app key
+		if app == "" {
+			fmt.Println("Warning: empty application public key")
+			continue
+		}
+
+		// Remove leading and trailing '"' from app
+		app = strings.TrimPrefix(app, "\"")
+		app = strings.TrimSuffix(app, "\"")
+
+		count, ok := result.Record().Value().(float64)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing application %s relay counts %v", app, result.Record().Value())
+		}
+
+		// TODO: log app + count + time
+		counts[app] += int64(count)
+	}
+	// check for an error
+	if result.Err() != nil {
+		return nil, fmt.Errorf("query parsing error: %s", result.Err().Error())
+	}
+
+	client.Close()
+	return counts, nil
+}
+
 func (i *influxDB) AppRelays(from, to time.Time) (map[string]int64, error) {
 	// Create a new client using an InfluxDB server base URL and an authentication token
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
@@ -149,4 +201,13 @@ func (i *influxDB) AppRelays(from, to time.Time) (map[string]int64, error) {
 
 	client.Close()
 	return counts, nil
+}
+
+// startOfDay returns the time matching the start of the day of the input.
+//	timezone/location is maintained.
+func startOfDay(day time.Time) time.Time {
+	y, m, d := day.Date()
+	l := day.Location()
+
+	return time.Date(y, m, d, 0, 0, 0, 0, l)
 }
