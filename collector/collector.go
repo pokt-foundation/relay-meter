@@ -17,6 +17,7 @@ const (
 
 type Source interface {
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]int64, error)
+	TodaysCounts() (map[string]int64, error)
 }
 
 type Writer interface {
@@ -26,6 +27,7 @@ type Writer interface {
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
 	// TODO: allow overwriting today's metrics
 	WriteDailyUsage(counts map[time.Time]map[string]int64) error
+	WriteTodaysUsage(counts map[string]int64) error
 }
 
 type Collector interface {
@@ -69,8 +71,16 @@ func (c *collector) Collect(from, to time.Time) error {
 	if err != nil {
 		return err
 	}
+	if err := c.Writer.WriteDailyUsage(counts); err != nil {
+		return err
+	}
 
-	return c.Writer.WriteDailyUsage(counts)
+	todaysCounts, err := c.Source.TodaysCounts()
+	if err != nil {
+		return err
+	}
+
+	return c.Writer.WriteTodaysUsage(todaysCounts)
 }
 
 func (c *collector) collect() error {

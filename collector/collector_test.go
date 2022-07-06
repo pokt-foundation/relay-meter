@@ -16,34 +16,38 @@ func TestCollect(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name          string
-		maxArchiveAge time.Duration
-		firstSaved    time.Time
-		lastSaved     time.Time
-		expectedFrom  time.Time
-		expectedTo    time.Time
+		name                 string
+		maxArchiveAge        time.Duration
+		firstSaved           time.Time
+		lastSaved            time.Time
+		expectedFrom         time.Time
+		expectedTo           time.Time
+		expectedTodaysWrites int
 	}{
 		{
-			name:          "Default values for start and end",
-			maxArchiveAge: 30 * 24 * time.Hour,
-			expectedFrom:  today.Add(-30 * 24 * time.Hour),
-			expectedTo:    today.AddDate(0, 0, 1),
+			name:                 "Default values for start and end",
+			maxArchiveAge:        30 * 24 * time.Hour,
+			expectedFrom:         today.Add(-30 * 24 * time.Hour),
+			expectedTo:           today.AddDate(0, 0, 1),
+			expectedTodaysWrites: 1,
 		},
 		{
-			name:          "Previous days with existing metrics are skipped",
-			maxArchiveAge: 30 * 24 * time.Hour,
-			firstSaved:    today.AddDate(0, 0, -40),
-			lastSaved:     today.AddDate(0, 0, -10),
-			expectedFrom:  today.AddDate(0, 0, -9),
-			expectedTo:    today.AddDate(0, 0, 1),
+			name:                 "Previous days with existing metrics are skipped",
+			maxArchiveAge:        30 * 24 * time.Hour,
+			firstSaved:           today.AddDate(0, 0, -40),
+			lastSaved:            today.AddDate(0, 0, -10),
+			expectedFrom:         today.AddDate(0, 0, -9),
+			expectedTo:           today.AddDate(0, 0, 1),
+			expectedTodaysWrites: 1,
 		},
 		{
-			name:          "Today is not skipped even if metrics are saved for it",
-			maxArchiveAge: 30 * 24 * time.Hour,
-			firstSaved:    today.AddDate(0, 0, -40),
-			lastSaved:     today,
-			expectedFrom:  today,
-			expectedTo:    today.AddDate(0, 0, 1),
+			name:                 "Today is not skipped even if metrics are saved for it",
+			maxArchiveAge:        30 * 24 * time.Hour,
+			firstSaved:           today.AddDate(0, 0, -40),
+			lastSaved:            today,
+			expectedFrom:         today,
+			expectedTo:           today.AddDate(0, 0, 1),
+			expectedTodaysWrites: 1,
 		},
 	}
 
@@ -70,6 +74,10 @@ func TestCollect(t *testing.T) {
 
 			if !source.requestedTo.Equal(tc.expectedTo) {
 				t.Fatalf("Expected 'to': %v, got: %v", tc.expectedTo, source.requestedTo)
+			}
+
+			if writer.todaysWrites != tc.expectedTodaysWrites {
+				t.Fatalf("Expected %d writes of todays metrics, got: %d", tc.expectedTodaysWrites, writer.todaysWrites)
 			}
 		})
 	}
@@ -121,6 +129,8 @@ type fakeSource struct {
 
 	response    map[time.Time]map[string]int64
 	responseErr error
+
+	todaysCounts map[string]int64
 }
 
 func (f *fakeSource) DailyCounts(from, to time.Time) (map[time.Time]map[string]int64, error) {
@@ -129,10 +139,15 @@ func (f *fakeSource) DailyCounts(from, to time.Time) (map[time.Time]map[string]i
 	return f.response, f.responseErr
 }
 
+func (f *fakeSource) TodaysCounts() (map[string]int64, error) {
+	return f.todaysCounts, nil
+}
+
 type fakeWriter struct {
-	first      time.Time
-	last       time.Time
-	callsCount int
+	first        time.Time
+	last         time.Time
+	callsCount   int
+	todaysWrites int
 }
 
 func (f *fakeWriter) ExistingMetricsTimespan() (time.Time, time.Time, error) {
@@ -141,5 +156,10 @@ func (f *fakeWriter) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 }
 
 func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]int64) error {
+	return nil
+}
+
+func (f *fakeWriter) WriteTodaysUsage(counts map[string]int64) error {
+	f.todaysWrites++
 	return nil
 }
