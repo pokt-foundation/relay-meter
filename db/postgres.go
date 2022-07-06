@@ -13,7 +13,10 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const DAY_LAYOUT = "2006-01-02"
+const (
+	DAY_LAYOUT = "2006-01-02"
+	TABLE_DAILY_SUMS = "daily_app_sums"
+)
 
 // Will be implemented by Postgres DB interface
 type Reporter interface {
@@ -29,6 +32,9 @@ type Writer interface {
 	// TODO: function to read entries, needed by the rollover
 	// TODO: rollover of entries
 	WriteDailyUsage(counts map[time.Time]map[string]int64) error
+
+	// Returns oldest and most recent timestamps for stored metrics
+	ExistingMetricsTimespan() (time.Time, time.Time, error) {
 }
 
 type PostgresOptions struct {
@@ -171,4 +177,28 @@ func (p *pgClient) WriteUsage(counts map[string]int64, lastCounted time.Time) er
 		return err
 	}
 	return nil
+}
+
+func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
+	ctx := context.Background()
+	row := p.DB.QueryRowContext(ctx, fmt.Sprintf("SELECT min(time), max(time) FROM %s", TABLE_DAILY_SUMS))
+	var firstStr, lastStr string
+	var first, last time.Time
+	if err := row.Scan(&firstStr, &lastStr); err != nil {
+		return first, last, err
+	}
+
+
+	first, err := p.parseDate(firstStr)
+	if err != nil {
+		return first, last, err
+	}
+	last, err = p.parseDate(lastStr)
+	return first, last, err
+}
+
+func (p *pgClient) parseDate(source string) (time.Time, error) {
+	// Postgres queries date output format: 2022-05-31T00:00:00Z
+	const layout = "2006-01-02T15:04:00Z"
+	return time.Parse(layout, source)
 }
