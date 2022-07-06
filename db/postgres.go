@@ -32,7 +32,8 @@ type Writer interface {
 	// TODO: function to read entries, needed by the rollover
 	// TODO: rollover of entries
 	WriteDailyUsage(counts map[time.Time]map[string]int64) error
-
+	// WriteTodaysUsage writes todays relay counts to the underlying storage.
+	WriteTodaysUsage(counts map[string]int64) error
 	// Returns oldest and most recent timestamps for stored metrics
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
 }
@@ -197,6 +198,43 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	}
 	last, err = p.parseDate(lastStr)
 	return first, last, err
+}
+
+// WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
+//	All the entries in the table holding todays metrics are deleted first.
+func (p *pgClient) WriteTodaysUsage(counts map[string]int64) error {
+	ctx := context.Background()
+	// TODO: determine required isolation level
+	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+
+	// todays_sums table gets rebuilt every time
+	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_app_sums")
+	if deleteErr != nil {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr)
+			return deleteErr
+		}
+	}
+
+	// TODO: bulk insert
+	for app, count := range counts {
+		_, execErr := tx.ExecContext(ctx, "INSERT INTO todays_app_sums(application, count) VALUES($1, $2);", app, count)
+		if execErr != nil {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+				return execErr
+			}
+			fmt.Printf("update failed: %v", execErr)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *pgClient) parseDate(source string) (time.Time, error) {
