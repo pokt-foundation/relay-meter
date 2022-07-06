@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	DAY_LAYOUT = "2006-01-02"
+	DAY_LAYOUT       = "2006-01-02"
 	TABLE_DAILY_SUMS = "daily_app_sums"
 )
 
@@ -34,7 +34,7 @@ type Writer interface {
 	WriteDailyUsage(counts map[time.Time]map[string]int64) error
 
 	// Returns oldest and most recent timestamps for stored metrics
-	ExistingMetricsTimespan() (time.Time, time.Time, error) {
+	ExistingMetricsTimespan() (time.Time, time.Time, error)
 }
 
 type PostgresOptions struct {
@@ -187,7 +187,6 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	if err := row.Scan(&firstStr, &lastStr); err != nil {
 		return first, last, err
 	}
-
 
 	first, err := p.parseDate(firstStr)
 	if err != nil {
