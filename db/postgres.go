@@ -22,6 +22,8 @@ const (
 type Reporter interface {
 	// DailyUsage returns saved daily metrics for the specified time period, with each day being an entry in the results map
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]int64, error)
+	// TodaysUsage returns the metrics for today so far
+	TodaysUsage() (map[string]int64, error)
 }
 
 // Will be implemented by Postgres DB interface
@@ -192,11 +194,11 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	if countStr == "0" {
 		return time.Time{}, time.Time{}, nil
 	}
-	first, err := p.parseDate(firstStr)
+	first, err := parseDate(firstStr)
 	if err != nil {
 		return first, last, err
 	}
-	last, err = p.parseDate(lastStr)
+	last, err = parseDate(lastStr)
 	return first, last, err
 }
 
@@ -237,7 +239,57 @@ func (p *pgClient) WriteTodaysUsage(counts map[string]int64) error {
 	return nil
 }
 
-func (p *pgClient) parseDate(source string) (time.Time, error) {
+// TodaysUsage returns the current day's metrics so far.
+func (pg *pgClient) TodaysUsage() (map[string]int64, error) {
+	// TODO: factor-out the SQL statements
+	ctx := context.Background()
+	rows, err := pg.DB.QueryContext(ctx, "SELECT (application, count) FROM todays_app_sums")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	todaysUsage := make(map[string]int64)
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return nil, err
+		}
+
+		// Example of query output:
+		// (46d4474f0a60f062103b1867c7edac323e58f416e7458f436623b9d96eb44b37,18931)
+		r = strings.ReplaceAll(r, "\"", "")
+		r = strings.TrimPrefix(r, "(")
+		r = strings.TrimSuffix(r, ")")
+		items := strings.Split(r, ",")
+		if len(items) != 2 {
+			return nil, fmt.Errorf("Invalid format in query output: %s", r)
+		}
+
+		count, err := strconv.ParseInt(items[1], 10, 64) // bitsize 64 for int64 return
+		if err != nil {
+			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[1], r, err)
+		}
+		app := items[0]
+		if app == "" {
+			return nil, fmt.Errorf("Empty application public key, in query result line: %s", r)
+		}
+
+		todaysUsage[app] = count
+	}
+	// TODO: verify this is needed
+	if rerr := rows.Close(); rerr != nil {
+		return nil, rerr
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return todaysUsage, nil
+}
+
+func parseDate(source string) (time.Time, error) {
 	// Postgres queries date output format: 2022-05-31T00:00:00Z
 	const layout = "2006-01-02T15:04:00Z"
 	return time.Parse(layout, source)
