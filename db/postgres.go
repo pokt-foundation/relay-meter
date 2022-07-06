@@ -181,13 +181,16 @@ func (p *pgClient) WriteUsage(counts map[string]int64, lastCounted time.Time) er
 
 func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	ctx := context.Background()
-	row := p.DB.QueryRowContext(ctx, fmt.Sprintf("SELECT min(time), max(time) FROM %s", TABLE_DAILY_SUMS))
-	var firstStr, lastStr string
+	row := p.DB.QueryRowContext(ctx, fmt.Sprintf("SELECT count(*), COALESCE(min(time), '2003-01-02 03:04' ), COALESCE(max(time), '2003-01-02 03:04') FROM %s", TABLE_DAILY_SUMS))
+	var countStr, firstStr, lastStr string
 	var first, last time.Time
-	if err := row.Scan(&firstStr, &lastStr); err != nil {
+	if err := row.Scan(&countStr, &firstStr, &lastStr); err != nil {
 		return first, last, err
 	}
 
+	if countStr == "0" {
+		return time.Time{}, time.Time{}, nil
+	}
 	first, err := p.parseDate(firstStr)
 	if err != nil {
 		return first, last, err
