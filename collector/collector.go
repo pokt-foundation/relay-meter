@@ -116,24 +116,25 @@ func (c *collector) Start(ctx context.Context, collectIntervalSeconds, reportInt
 		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
 	}
 
+	reportTicker := time.NewTicker(time.Duration(reportIntervalSeconds) * time.Second)
+	collectTicker := time.NewTicker(time.Duration(collectIntervalSeconds) * time.Second)
+
+	remaining := collectIntervalSeconds
 	for {
-		remaining := collectIntervalSeconds // COLLECT_INTERVAL_SECONDS
-		for {
-			select {
-			case <-ctx.Done():
-				c.Logger.Warn("Context has been cancelled. Collecter exiting.")
-				return
-			case <-time.After(time.Second * time.Duration(reportIntervalSeconds)):
-				remaining -= reportIntervalSeconds
-				if remaining > 0 {
-					c.Logger.Info(fmt.Sprintf("Will collect data in %d seconds...", remaining))
-				} else {
-					if err := c.collect(); err != nil {
-						c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
-					}
-					break
-				}
+		select {
+		case <-ctx.Done():
+			c.Logger.Warn("Context has been cancelled. Collecter exiting.")
+			return
+		case <-reportTicker.C:
+			remaining -= reportIntervalSeconds
+			c.Logger.Info(fmt.Sprintf("Will collect data in %d seconds...", remaining))
+		case <-collectTicker.C:
+			c.Logger.Info("Starting data collection...")
+			if err := c.collect(); err != nil {
+				c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
 			}
+			c.Logger.Info("Data collection completed.")
+			remaining = collectIntervalSeconds
 		}
 	}
 }

@@ -92,8 +92,8 @@ func TestStart(t *testing.T) {
 	}{
 		{
 			name:             "Data collected on every interval",
-			collectInterval:  3,
-			sleepDuration:    5 * time.Second,
+			collectInterval:  4,
+			sleepDuration:    10 * time.Second,
 			expectedCollects: 1 + 2,
 		},
 	}
@@ -111,7 +111,7 @@ func TestStart(t *testing.T) {
 
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
-				c.Start(ctx, tc.collectInterval, 1)
+				c.Start(ctx, tc.collectInterval, 2)
 			}()
 			time.Sleep(tc.sleepDuration)
 			cancel()
