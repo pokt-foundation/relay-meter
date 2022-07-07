@@ -13,6 +13,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// TODO: db package needs some form of unit testing
 const (
 	DAY_LAYOUT       = "2006-01-02"
 	TABLE_DAILY_SUMS = "daily_app_sums"
