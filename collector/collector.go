@@ -112,9 +112,11 @@ func (c *collector) collect() error {
 
 func (c *collector) Start(ctx context.Context, collectIntervalSeconds, reportIntervalSeconds int) {
 	// Do an initial data collection, and then repeat on set intervals
+	c.Logger.Info("Starting initial data collection...")
 	if err := c.collect(); err != nil {
 		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
 	}
+	c.Logger.Info("Initial data collection completed.")
 
 	reportTicker := time.NewTicker(time.Duration(reportIntervalSeconds) * time.Second)
 	collectTicker := time.NewTicker(time.Duration(collectIntervalSeconds) * time.Second)
