@@ -123,6 +123,7 @@ func timePeriod(req *http.Request) (time.Time, time.Time, error) {
 	return from, to, nil
 }
 
+// TODO: Return 404 on Application not found error
 // TODO: Return 304, i.e. Not Modified, if relevant
 // TODO: 'Accepts' Header in the request
 // serves: /relays/apps
