@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	logger "github.com/sirupsen/logrus"
 )
 
 func TestAppRelays(t *testing.T) {
@@ -172,13 +173,16 @@ func TestAppRelays(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			fakeBackend := fakeBackend{
 				usage:       tc.usageData,
 				todaysUsage: tc.todaysUsage,
 			}
 
-			relayMeter := relayMeter{Backend: &fakeBackend}
+			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), 100*time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 			got, err := relayMeter.AppRelays(tc.app, tc.from, tc.to)
 			if err != nil {
 				if tc.expectedErr == nil {
