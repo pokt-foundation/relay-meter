@@ -14,6 +14,7 @@ const (
 type Backend interface {
 	//TODO: reverse map keys order, i.e. map[app]-> map[day]int64, at PG level
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]int64, error)
+	TodaysUsage() (map[string]int64, error)
 }
 
 func NewRelayMeter(backend Backend, logger *logger.Logger) RelayMeter {
@@ -31,15 +32,22 @@ type relayMeter struct {
 
 	lastQueryTime time.Time
 	dailyUsage    map[time.Time]map[string]int64
+	todaysUsage   map[string]int64
 }
 
-// TODO: for now, today's data gets overwritten every time. If needed, have a separate table for today's relays, adding periods as they occur in the day
+// TODO: for now, today's data gets overwritten every time. If needed add todays metrics in intervals as they occur in the day
 func (r *relayMeter) loadData(from, to time.Time) error {
 	usage, err := r.Backend.DailyUsage(from, to)
 	if err != nil {
 		return err
 	}
 	r.dailyUsage = usage
+
+	todaysUsage, err := r.Backend.TodaysUsage()
+	if err != nil {
+		return err
+	}
+	r.todaysUsage = todaysUsage
 	return nil
 }
 
@@ -71,6 +79,13 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 		if (day.After(from) || day.Equal(from)) && day.Before(to) {
 			total += counts[app]
 		}
+	}
+
+	// Get today's date in day-only format
+	now := time.Now()
+	_, today, _ := AdjustTimePeriod(now, now)
+	if today.Equal(to) {
+		total += r.todaysUsage[app]
 	}
 
 	resp.Count = total
