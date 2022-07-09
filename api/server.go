@@ -11,13 +11,6 @@ import (
 	logger "github.com/sirupsen/logrus"
 )
 
-type RelayMeter interface {
-	// AppRelays returns total number of relays for the app over the specified time period
-	AppRelays(app string, from, to time.Time) (AppRelaysResponse, error)
-	// TODO: relays(user, timePeriod): returns total number of relays for all apps of the user over the specified time period (granularity roughly 1 day as a starting point)
-	// TODO: totalrelays(timePeriod)
-}
-
 const (
 	DATE_LAYOUT    = time.RFC3339
 	PARAMETER_FROM = "from"

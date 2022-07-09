@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	logger "github.com/sirupsen/logrus"
 
@@ -52,7 +53,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	meter := api.NewRelayMeter(pgClient, log)
+	// TODO: make the data loader run interval configurable
+	meter := api.NewRelayMeter(pgClient, log, 30*time.Second)
 	http.HandleFunc("/", api.GetHttpServer(meter, log))
 
 	log.Info("Starting the apiserver...")
