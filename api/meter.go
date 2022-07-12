@@ -133,7 +133,8 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 		}
 	}
 
-	if today.Equal(to) {
+	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
+	if today.Equal(to) || today.Before(to) {
 		total += r.todaysUsage[app]
 	}
 
