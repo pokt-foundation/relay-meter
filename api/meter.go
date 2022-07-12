@@ -13,10 +13,10 @@ const (
 	dayFormat = "2006-01-02"
 
 	// TODO: make all time-related parameters configurable
-	TTL_DAILY_METRICS_SECONDS  = 900
-	TTL_TODAYS_METRICS_SECONDS = 600
+	TTL_DAILY_METRICS_DEFAULT_SECONDS  = 900
+	TTL_TODAYS_METRICS_DEFAULT_SECONDS = 600
 
-	MAX_PAST_DAYS_METRICS = 30
+	MAX_PAST_DAYS_METRICS_DEFAULT_DAYS = 30
 )
 
 type RelayMeter interface {
@@ -26,19 +26,27 @@ type RelayMeter interface {
 	// TODO: totalrelays(timePeriod)
 }
 
+type RelayMeterOptions struct {
+	LoadInterval     time.Duration
+	DailyMetricsTTL  time.Duration
+	TodaysMetricsTTL time.Duration
+	MaxPastDays      time.Duration
+}
+
 type Backend interface {
 	//TODO: reverse map keys order, i.e. map[app]-> map[day]int64, at PG level
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]int64, error)
 	TodaysUsage() (map[string]int64, error)
 }
 
-func NewRelayMeter(backend Backend, logger *logger.Logger, loadInterval time.Duration) RelayMeter {
+func NewRelayMeter(backend Backend, logger *logger.Logger, options RelayMeterOptions) RelayMeter {
 	// PG client
 	meter := &relayMeter{
-		Backend: backend,
-		Logger:  logger,
+		Backend:           backend,
+		Logger:            logger,
+		RelayMeterOptions: options,
 	}
-	go func() { meter.StartDataLoader(context.Background(), loadInterval) }()
+	go func() { meter.StartDataLoader(context.Background()) }()
 	return meter
 }
 
@@ -53,6 +61,15 @@ type relayMeter struct {
 	dailyTTL  time.Time
 	todaysTTL time.Time
 	rwMutex   sync.RWMutex
+
+	RelayMeterOptions
+}
+
+func (r *relayMeter) isEmpty() bool {
+	r.rwMutex.RLock()
+	defer r.rwMutex.RUnlock()
+
+	return len(r.dailyUsage) == 0 || len(r.todaysUsage) == 0
 }
 
 // TODO: for now, today's data gets overwritten every time. If needed add todays metrics in intervals as they occur in the day
@@ -63,7 +80,9 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	var dailyUsage map[time.Time]map[string]int64
 	var todaysUsage map[string]int64
 	var err error
-	if now.After(r.dailyTTL) {
+	noDataYet := r.isEmpty()
+
+	if noDataYet || now.After(r.dailyTTL) {
 		updateDaily = true
 		// TODO: send backend requests concurrently
 		dailyUsage, err = r.Backend.DailyUsage(from, to)
@@ -71,15 +90,17 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading daily usage data")
 			return err
 		}
+		r.Logger.WithFields(logger.Fields{"daily_metrics_count": len(dailyUsage)}).Info("Received daily metrics")
 	}
 
-	if now.After(r.todaysTTL) {
+	if noDataYet || now.After(r.todaysTTL) {
 		updateToday = true
 		todaysUsage, err = r.Backend.TodaysUsage()
 		if err != nil {
 			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading todays usage data")
 			return err
 		}
+		r.Logger.WithFields(logger.Fields{"todays_metrics_count": len(todaysUsage)}).Info("Received todays metrics")
 	}
 
 	if !updateDaily && !updateToday {
@@ -91,11 +112,19 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 
 	if updateDaily {
 		r.dailyUsage = dailyUsage
-		r.dailyTTL = time.Now().Add(time.Duration(TTL_DAILY_METRICS_SECONDS) * time.Second)
+		d := r.RelayMeterOptions.DailyMetricsTTL
+		if int(d.Seconds()) == 0 {
+			d = time.Duration(TTL_DAILY_METRICS_DEFAULT_SECONDS) * time.Second
+		}
+		r.dailyTTL = time.Now().Add(d)
 	}
 	if updateToday {
 		r.todaysUsage = todaysUsage
-		r.todaysTTL = time.Now().Add(time.Duration(TTL_TODAYS_METRICS_SECONDS) * time.Second)
+		d := r.RelayMeterOptions.TodaysMetricsTTL
+		if int(d.Seconds()) == 0 {
+			d = time.Duration(TTL_TODAYS_METRICS_DEFAULT_SECONDS) * time.Second
+		}
+		r.todaysTTL = time.Now().Add(d)
 	}
 	return nil
 }
@@ -105,6 +134,7 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 // Both parameters are assumed to be in the same timezone as the source of the data, i.e. influx
 //	The From parameter is taken to mean the very start of the day that it specifies: the returned result includes all such relays
 func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysResponse, error) {
+	r.Logger.WithFields(logger.Fields{"app": app, "from": from, "to": to}).Info("apiserver: Received AppRelays request")
 	resp := AppRelaysResponse{
 		From:        from,
 		To:          to,
@@ -147,27 +177,39 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 
 // Starts a data loader in a go routine, to periodically load data from the backend
 // 	context allows stopping the data loader
-func (r *relayMeter) StartDataLoader(ctx context.Context, loadInterval time.Duration) {
-	go func() {
-		ticker := time.NewTicker(loadInterval)
+func (r *relayMeter) StartDataLoader(ctx context.Context) {
+	pastDays := r.RelayMeterOptions.MaxPastDays
+	if pastDays == 0 {
+		pastDays = MAX_PAST_DAYS_METRICS_DEFAULT_DAYS
+	}
+	maxPastDays := -24 * time.Hour * time.Duration(pastDays)
+
+	load := func() {
+		from := time.Now().Add(maxPastDays)
+		from, to, err := AdjustTimePeriod(from, time.Now())
+		if err != nil {
+			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
+			return
+		}
+		r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting data loader...")
+		if err := r.loadData(from, to); err != nil {
+			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
+		}
+	}
+
+	r.Logger.Info("Running initial data loader iteration...")
+	load()
+	go func(maxPastDays time.Duration) {
+		ticker := time.NewTicker(r.RelayMeterOptions.LoadInterval)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				from := time.Now().Add(-24 * time.Hour * time.Duration(MAX_PAST_DAYS_METRICS))
-				from, to, err := AdjustTimePeriod(from, time.Now())
-				if err != nil {
-					r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
-					break
-				}
-				r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting data loader...")
-				if err := r.loadData(from, to); err != nil {
-					r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
-				}
+				load()
 			}
 		}
-	}()
+	}(maxPastDays)
 
 	for {
 		select {
