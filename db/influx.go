@@ -42,7 +42,7 @@ type influxDB struct {
 //	Each app will have an entry per day
 func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int64, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
-	queryAPI := client.QueryAPI("my-org")
+	queryAPI := client.QueryAPI(i.Options.Org)
 
 	// Loop on days
 	startDay, endDay, err := api.AdjustTimePeriod(from, to)
@@ -107,7 +107,7 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int
 
 func (i *influxDB) TodaysCounts() (map[string]int64, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
-	queryAPI := client.QueryAPI("my-org")
+	queryAPI := client.QueryAPI(i.Options.Org)
 
 	counts := make(map[string]int64)
 	// TODO: send queries in parallel
@@ -159,7 +159,7 @@ func (i *influxDB) AppRelays(from, to time.Time) (map[string]int64, error) {
 	// Create a new client using an InfluxDB server base URL and an authentication token
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	// Get query client
-	queryAPI := client.QueryAPI("my-org")
+	queryAPI := client.QueryAPI(i.Options.Org)
 
 	query := `from(bucket:"relays")|> range(` + fmt.Sprintf("start: %d,", from.Unix()) + fmt.Sprintf("stop: %d)", to.Unix()) + ` |> filter(fn: (r) => r._measurement == "relay") |> group(columns: ["applicationPublicKey"]) |> count()`
 
