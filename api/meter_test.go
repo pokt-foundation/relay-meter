@@ -229,7 +229,7 @@ func TestAppRelays(t *testing.T) {
 				todaysUsage: tc.todaysUsage,
 			}
 
-			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), 100*time.Millisecond)
+			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			got, err := relayMeter.AppRelays(tc.app, tc.from, tc.to)
 			if err != nil {
