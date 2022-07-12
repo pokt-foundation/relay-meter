@@ -59,11 +59,13 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int
 	// TODO: send queries in parallel
 	for current := startDay; current.Before(endDay); current = current.AddDate(0, 0, 1) {
 		query := fmt.Sprintf("from(bucket: %q)", i.Options.DailyBucket) +
-			fmt.Sprintf(" |> range(start: %d, stop: %d)", current.Unix(), current.AddDate(0, 0, 1).Unix()) +
-			fmt.Sprintf(" |> filter(fn: (r) => r._measurement == %q)", "relay") +
+			fmt.Sprintf(" |> range(start: %s, stop: %s)", current.Format(time.RFC3339), current.AddDate(0, 0, 1).Format(time.RFC3339)) +
+			fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
+			fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
 			fmt.Sprintf(" |> group(columns: [%q])", "applicationPublicKey") +
 			" |> sum()"
 
+		fmt.Printf("DEBUG: query: %s\n", query)
 		result, err := queryAPI.Query(context.Background(), query)
 		if err != nil {
 			return nil, err
@@ -86,7 +88,7 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int
 			app = strings.TrimPrefix(app, "\"")
 			app = strings.TrimSuffix(app, "\"")
 
-			count, ok := result.Record().Value().(float64)
+			count, ok := result.Record().Value().(int64)
 			if !ok {
 				return nil, fmt.Errorf("Error parsing application %s relay counts %v", app, result.Record().Value())
 			}
@@ -112,8 +114,9 @@ func (i *influxDB) TodaysCounts() (map[string]int64, error) {
 	counts := make(map[string]int64)
 	// TODO: send queries in parallel
 	query := fmt.Sprintf("from(bucket: %q)", i.Options.CurrentBucket) +
-		fmt.Sprintf(" |> range(start: %d)", startOfDay(time.Now()).Unix()) +
-		fmt.Sprintf(" |> filter(fn: (r) => r._measurement == %q)", "relay") +
+		fmt.Sprintf(" |> range(start: %s)", startOfDay(time.Now()).Format(time.RFC3339)) +
+		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
+		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
 		fmt.Sprintf(" |> group(columns: [%q])", "applicationPublicKey") +
 		" |> sum()"
 
@@ -138,7 +141,7 @@ func (i *influxDB) TodaysCounts() (map[string]int64, error) {
 		app = strings.TrimPrefix(app, "\"")
 		app = strings.TrimSuffix(app, "\"")
 
-		count, ok := result.Record().Value().(float64)
+		count, ok := result.Record().Value().(int64)
 		if !ok {
 			return nil, fmt.Errorf("Error parsing application %s relay counts %v", app, result.Record().Value())
 		}
