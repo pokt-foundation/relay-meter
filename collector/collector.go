@@ -71,6 +71,7 @@ func (c *collector) Collect(from, to time.Time) error {
 	if err != nil {
 		return err
 	}
+	c.Logger.WithFields(logger.Fields{"daily_metrics_count": len(counts), "from": from, "to": to}).Info("Collected daily metrics")
 	if err := c.Writer.WriteDailyUsage(counts); err != nil {
 		return err
 	}
@@ -79,6 +80,7 @@ func (c *collector) Collect(from, to time.Time) error {
 	if err != nil {
 		return err
 	}
+	c.Logger.WithFields(logger.Fields{"todays_metrics_count": len(todaysCounts)}).Info("Collected todays metrics")
 
 	return c.Writer.WriteTodaysUsage(todaysCounts)
 }
