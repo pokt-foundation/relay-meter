@@ -72,10 +72,10 @@ func (c *collector) Collect(from, to time.Time) error {
 		return err
 	}
 	c.Logger.WithFields(logger.Fields{"daily_metrics_count": len(counts), "from": from, "to": to}).Info("Collected daily metrics")
-	if err := c.Writer.WriteDailyUsage(counts); err != nil {
-		return err
-	}
+	return c.Writer.WriteDailyUsage(counts)
+}
 
+func (c *collector) CollectTodaysMetrics() error {
 	todaysCounts, err := c.Source.TodaysCounts()
 	if err != nil {
 		return err
@@ -86,23 +86,32 @@ func (c *collector) Collect(from, to time.Time) error {
 }
 
 func (c *collector) collect() error {
+	if err := c.CollectTodaysMetrics(); err != nil {
+		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect todays metrics")
+		return err
+	}
+
 	first, last, err := c.Writer.ExistingMetricsTimespan()
 	if err != nil {
 		return err
 	}
+	c.Logger.WithFields(logger.Fields{"first": first, "last": last}).Info("Verified existing daily metrics")
 
 	// We assume there are no gaps between stored metrics from start to end, so
 	// 	start collecting metrics after the last saved date
+	dayLayout := "2006-01-02"
+	today, err := time.Parse(dayLayout, time.Now().Format(dayLayout))
+	if err != nil {
+		return err
+	}
+	if last.Equal(today.AddDate(0, 0, -1)) || last.After(today.AddDate(0, 0, -1)) {
+		c.Logger.WithFields(logger.Fields{"today": today, "last_daily_collected": last}).Info("Last collected daily metric was yesterday, skipping daily metrics collection...")
+		return nil
+	}
 	var from time.Time
 	if first.Equal(time.Time{}) {
 		from = time.Now().Add(-1 * c.MaxArchiveAge)
 	} else {
-		dayLayout := "2006-01-02"
-		today, err := time.Parse(dayLayout, time.Now().Format(dayLayout))
-		if err != nil {
-			return err
-		}
-
 		from = last.AddDate(0, 0, 1)
 		if from.After(today) {
 			from = today

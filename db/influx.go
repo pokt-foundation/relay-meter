@@ -65,7 +65,6 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int
 			fmt.Sprintf(" |> group(columns: [%q])", "applicationPublicKey") +
 			" |> sum()"
 
-		fmt.Printf("DEBUG: query: %s\n", query)
 		result, err := queryAPI.Query(context.Background(), query)
 		if err != nil {
 			return nil, err
