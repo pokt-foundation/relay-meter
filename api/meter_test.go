@@ -207,6 +207,28 @@ func TestAppRelays(t *testing.T) {
 			},
 		},
 		{
+			name: "Missing parameters' default values",
+			app:  "app1",
+			usageData: map[time.Time]map[string]int64{
+				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
+				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
+				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
+				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
+				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
+				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
+			},
+			todaysUsage: map[string]int64{
+				"app1": 50,
+				"app2": 30,
+			},
+			expected: AppRelaysResponse{
+				Application: "app1",
+				From:        now.AddDate(0, 0, -30),
+				To:          now.AddDate(0, 0, 1),
+				Count:       61,
+			},
+		},
+		{
 			name:        "Invalid timespan is rejected",
 			app:         "app1",
 			from:        now.AddDate(0, 0, -1),

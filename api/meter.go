@@ -178,11 +178,7 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 // Starts a data loader in a go routine, to periodically load data from the backend
 // 	context allows stopping the data loader
 func (r *relayMeter) StartDataLoader(ctx context.Context) {
-	pastDays := r.RelayMeterOptions.MaxPastDays
-	if pastDays == 0 {
-		pastDays = MAX_PAST_DAYS_METRICS_DEFAULT_DAYS
-	}
-	maxPastDays := -24 * time.Hour * time.Duration(pastDays)
+	maxPastDays := maxArchiveAge(r.RelayMeterOptions.MaxPastDays)
 
 	load := func() {
 		from := time.Now().Add(maxPastDays)
@@ -223,11 +219,33 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 //	- From is adjusted to the start of the day that it originally specifies
 //	- To is adjusted to the start of the next day from the day it originally specifies
 func AdjustTimePeriod(from, to time.Time) (time.Time, time.Time, error) {
+
+	// TODO: refactor: there is some duplication in the function
+	getDefault := func(parameter time.Time, defaultValue time.Time) (time.Time, error) {
+		if parameter.Equal(time.Time{}) {
+			return time.Parse(dayFormat, defaultValue.Format(dayFormat))
+		}
+		return parameter, nil
+	}
+
+	var err error
+	// TODO: set default from parameter to the actual MaxPastDays passed to the meter, i.e. r.RelayMeterOptions.MaxPastDays
+	from, err = getDefault(from, time.Now().Add(-24*time.Hour*time.Duration(MAX_PAST_DAYS_METRICS_DEFAULT_DAYS)))
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+
+	// Missing 'to' is set to include today
+	to, err = getDefault(to, time.Now())
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+
 	if !from.Before(to) && !from.Equal(to) {
 		return time.Time{}, time.Time{}, fmt.Errorf("Invalid timespan: %v -- %v", from, to)
 	}
 
-	from, err := time.Parse(dayFormat, from.Format(dayFormat))
+	from, err = time.Parse(dayFormat, from.Format(dayFormat))
 	if err != nil {
 		return time.Time{}, time.Time{}, err
 	}
@@ -237,4 +255,11 @@ func AdjustTimePeriod(from, to time.Time) (time.Time, time.Time, error) {
 		return time.Time{}, time.Time{}, err
 	}
 	return from, to.AddDate(0, 0, 1), nil
+}
+
+func maxArchiveAge(maxPastDays time.Duration) time.Duration {
+	if maxPastDays == 0 {
+		return -24 * time.Hour * time.Duration(MAX_PAST_DAYS_METRICS_DEFAULT_DAYS)
+	}
+	return maxPastDays
 }
