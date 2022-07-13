@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -12,7 +13,6 @@ import (
 
 func TestAppRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
-
 	testCases := []struct {
 		name                string
 		app                 string
@@ -270,6 +270,56 @@ func TestAppRelays(t *testing.T) {
 	}
 }
 
+func TestStartDataLoader(t *testing.T) {
+	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
+
+	testCases := []struct {
+		name          string
+		maxArchiveAge time.Duration
+		expectedFrom  time.Time
+		expectedTo    time.Time
+	}{
+		{
+			name:         "Default maxArchiveAge is applied",
+			expectedFrom: now.AddDate(0, 0, -1*MAX_PAST_DAYS_METRICS_DEFAULT_DAYS),
+			expectedTo:   now,
+		},
+		{
+			name:          "The specified maxArchiveAge takes effect",
+			maxArchiveAge: 24 * 5 * time.Hour,
+			expectedFrom:  now.AddDate(0, 0, -5),
+			expectedTo:    now,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeBackend := fakeBackend{}
+			meter := &relayMeter{
+				Backend: &fakeBackend,
+				Logger:  logger.New(),
+				RelayMeterOptions: RelayMeterOptions{
+					LoadInterval: 1 * time.Second,
+					MaxPastDays:  tc.maxArchiveAge,
+				},
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			go func() {
+				meter.StartDataLoader(ctx)
+			}()
+			// We only need the initial data loader run
+			time.Sleep(10 * time.Millisecond)
+			cancel()
+
+			if !tc.expectedFrom.Equal(fakeBackend.dailyMetricsFrom) {
+				t.Errorf("Expected 'from' to be: %v, got: %v", tc.expectedFrom, fakeBackend.dailyMetricsFrom)
+			}
+
+		})
+	}
+}
+
 type fakeBackend struct {
 	usage       map[time.Time]map[string]int64
 	err         error
@@ -277,10 +327,14 @@ type fakeBackend struct {
 
 	todaysMetricsCalls int
 	dailyMetricsCalls  int
+	dailyMetricsFrom   time.Time
+	dailyMetricsTo     time.Time
 }
 
 func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[string]int64, error) {
 	f.dailyMetricsCalls++
+	f.dailyMetricsFrom = from
+	f.dailyMetricsTo = to
 	return f.usage, f.err
 }
 

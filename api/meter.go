@@ -180,8 +180,8 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 func (r *relayMeter) StartDataLoader(ctx context.Context) {
 	maxPastDays := maxArchiveAge(r.RelayMeterOptions.MaxPastDays)
 
-	load := func() {
-		from := time.Now().Add(maxPastDays)
+	load := func(max time.Duration) {
+		from := time.Now().Add(max)
 		from, to, err := AdjustTimePeriod(from, time.Now())
 		if err != nil {
 			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
@@ -193,16 +193,16 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 		}
 	}
 
-	r.Logger.Info("Running initial data loader iteration...")
-	load()
-	go func(maxPastDays time.Duration) {
+	r.Logger.WithFields(logger.Fields{"maxArchiveAge": maxPastDays}).Info("Running initial data loader iteration...")
+	load(maxPastDays)
+	go func(maxDays time.Duration) {
 		ticker := time.NewTicker(r.RelayMeterOptions.LoadInterval)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				load()
+				load(maxDays)
 			}
 		}
 	}(maxPastDays)
@@ -261,5 +261,5 @@ func maxArchiveAge(maxPastDays time.Duration) time.Duration {
 	if maxPastDays == 0 {
 		return -24 * time.Hour * time.Duration(MAX_PAST_DAYS_METRICS_DEFAULT_DAYS)
 	}
-	return maxPastDays
+	return time.Duration(-1) * maxPastDays
 }
