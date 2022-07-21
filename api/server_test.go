@@ -74,7 +74,7 @@ func TestHandleAppRelays(t *testing.T) {
 		{
 			name: "Correct number of relays is returned",
 			meterResponse: AppRelaysResponse{
-				Count:       5,
+				Count:       RelayCounts{Success: 5, Failure: 3},
 				From:        now,
 				To:          now,
 				Application: "app",
@@ -84,7 +84,7 @@ func TestHandleAppRelays(t *testing.T) {
 		{
 			name: "Error from the meter returns an internal error response",
 			meterResponse: AppRelaysResponse{
-				Count:       0,
+				Count:       RelayCounts{},
 				From:        now,
 				To:          now,
 				Application: "internal meter error",
@@ -95,7 +95,7 @@ func TestHandleAppRelays(t *testing.T) {
 		{
 			name: "Application not found returns a not found response",
 			meterResponse: AppRelaysResponse{
-				Count:       0,
+				Count:       RelayCounts{},
 				From:        now,
 				To:          now,
 				Application: "non-existent-app",
@@ -106,7 +106,7 @@ func TestHandleAppRelays(t *testing.T) {
 		{
 			name: "Bad request returns reqest error response",
 			meterResponse: AppRelaysResponse{
-				Count:       0,
+				Count:       RelayCounts{},
 				From:        now,
 				To:          now,
 				Application: "app",

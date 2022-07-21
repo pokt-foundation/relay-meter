@@ -27,16 +27,21 @@ type RelayMeter interface {
 	TotalRelays(from, to time.Time) (TotalRelaysResponse, error)
 }
 
+type RelayCounts struct {
+	Success int64
+	Failure int64
+}
+
 // TODO: refactor common fields
 type AppRelaysResponse struct {
-	Count       int64
+	Count       RelayCounts
 	From        time.Time
 	To          time.Time
 	Application string
 }
 
 type UserRelaysResponse struct {
-	Count        int64
+	Count        RelayCounts
 	From         time.Time
 	To           time.Time
 	User         string
@@ -44,7 +49,7 @@ type UserRelaysResponse struct {
 }
 
 type TotalRelaysResponse struct {
-	Count int64
+	Count RelayCounts
 	From  time.Time
 	To    time.Time
 }
@@ -57,9 +62,9 @@ type RelayMeterOptions struct {
 }
 
 type Backend interface {
-	//TODO: reverse map keys order, i.e. map[app]-> map[day]int64, at PG level
-	DailyUsage(from, to time.Time) (map[time.Time]map[string]int64, error)
-	TodaysUsage() (map[string]int64, error)
+	//TODO: reverse map keys order, i.e. map[app]-> map[day]RelayCounts, at PG level
+	DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error)
+	TodaysUsage() (map[string]RelayCounts, error)
 	// Is expected to return the list of applicationIDs owned by the user
 	UserApps(user string) ([]string, error)
 }
@@ -80,8 +85,8 @@ type relayMeter struct {
 	Backend
 	*logger.Logger
 
-	dailyUsage  map[time.Time]map[string]int64
-	todaysUsage map[string]int64
+	dailyUsage  map[time.Time]map[string]RelayCounts
+	todaysUsage map[string]RelayCounts
 
 	dailyTTL  time.Time
 	todaysTTL time.Time
@@ -102,8 +107,8 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	var updateDaily, updateToday bool
 
 	now := time.Now()
-	var dailyUsage map[time.Time]map[string]int64
-	var todaysUsage map[string]int64
+	var dailyUsage map[time.Time]map[string]RelayCounts
+	var todaysUsage map[string]RelayCounts
 	var err error
 	noDataYet := r.isEmpty()
 
@@ -180,17 +185,19 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	var total int64
+	var total RelayCounts
 	for day, counts := range r.dailyUsage {
 		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
 		if (day.After(from) || day.Equal(from)) && day.Before(to) {
-			total += counts[app]
+			total.Success += counts[app].Success
+			total.Failure += counts[app].Failure
 		}
 	}
 
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
-		total += r.todaysUsage[app]
+		total.Success += r.todaysUsage[app].Success
+		total.Failure += r.todaysUsage[app].Failure
 	}
 
 	resp.Count = total
@@ -228,12 +235,13 @@ func (r *relayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResp
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	var total int64
+	var total RelayCounts
 	for day, counts := range r.dailyUsage {
 		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
 		if (day.After(from) || day.Equal(from)) && day.Before(to) {
 			for _, app := range apps {
-				total += counts[app]
+				total.Success += counts[app].Success
+				total.Failure += counts[app].Failure
 			}
 		}
 	}
@@ -241,7 +249,8 @@ func (r *relayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResp
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
 		for _, app := range apps {
-			total += r.todaysUsage[app]
+			total.Success += r.todaysUsage[app].Success
+			total.Failure += r.todaysUsage[app].Failure
 		}
 	}
 
@@ -274,12 +283,13 @@ func (r *relayMeter) TotalRelays(from, to time.Time) (TotalRelaysResponse, error
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	var total int64
+	var total RelayCounts
 	for day, counts := range r.dailyUsage {
 		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
 		if (day.After(from) || day.Equal(from)) && day.Before(to) {
 			for _, count := range counts {
-				total += count
+				total.Success += count.Success
+				total.Failure += count.Failure
 			}
 		}
 	}
@@ -287,7 +297,8 @@ func (r *relayMeter) TotalRelays(from, to time.Time) (TotalRelaysResponse, error
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
 		for _, count := range r.todaysUsage {
-			total += count
+			total.Success += count.Success
+			total.Failure += count.Failure
 		}
 	}
 

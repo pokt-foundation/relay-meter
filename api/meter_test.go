@@ -13,20 +13,8 @@ import (
 
 func TestUserRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
-	usageData := map[time.Time]map[string]int64{
-		now.AddDate(0, 0, -6): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -5): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -4): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -3): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -2): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -1): {"app1": 2, "app2": 1, "app4": 5},
-	}
-
-	todaysUsage := map[string]int64{
-		"app1": 50,
-		"app2": 30,
-		"app4": 500,
-	}
+	usageData := fakeDailyMetrics()
+	todaysUsage := fakeTodaysMetrics()
 
 	testCases := []struct {
 		name     string
@@ -45,7 +33,10 @@ func TestUserRelays(t *testing.T) {
 				To:           now.AddDate(0, 0, 1),
 				User:         "user1",
 				Applications: []string{"app1", "app2", "app3"},
-				Count:        98,
+				Count: RelayCounts{
+					Success: 6*(2+1) + 50 + 30,
+					Failure: 6*(3+5) + 40 + 70,
+				},
 			},
 		},
 		{
@@ -58,7 +49,10 @@ func TestUserRelays(t *testing.T) {
 				To:           now.AddDate(0, 0, -1),
 				User:         "user1",
 				Applications: []string{"app1", "app2", "app3"},
-				Count:        15,
+				Count: RelayCounts{
+					Success: 5 * (2 + 1),
+					Failure: 5 * (3 + 5),
+				},
 			},
 		},
 		{
@@ -71,7 +65,10 @@ func TestUserRelays(t *testing.T) {
 				To:           now.AddDate(0, 0, 1),
 				User:         "user1",
 				Applications: []string{"app1", "app2", "app3"},
-				Count:        80,
+				Count: RelayCounts{
+					Success: 50 + 30,
+					Failure: 40 + 70,
+				},
 			},
 		},
 	}
@@ -105,20 +102,8 @@ func TestUserRelays(t *testing.T) {
 
 func TestTotalRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
-	usageData := map[time.Time]map[string]int64{
-		now.AddDate(0, 0, -6): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -5): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -4): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -3): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -2): {"app1": 2, "app2": 1, "app4": 5},
-		now.AddDate(0, 0, -1): {"app1": 2, "app2": 1, "app4": 5},
-	}
-
-	todaysUsage := map[string]int64{
-		"app1": 50,
-		"app2": 30,
-		"app4": 500,
-	}
+	usageData := fakeDailyMetrics()
+	todaysUsage := fakeTodaysMetrics()
 
 	testCases := []struct {
 		name     string
@@ -131,9 +116,12 @@ func TestTotalRelays(t *testing.T) {
 			from: now.AddDate(0, 0, -6),
 			to:   now,
 			expected: TotalRelaysResponse{
-				From:  now.AddDate(0, 0, -6),
-				To:    now.AddDate(0, 0, 1),
-				Count: 500 + 30 + 50 + 6*(2+1+5),
+				From: now.AddDate(0, 0, -6),
+				To:   now.AddDate(0, 0, 1),
+				Count: RelayCounts{
+					Success: 6*(2+1+5) + 50 + 30 + 500,
+					Failure: 6*(3+5+7) + 40 + 70 + 700,
+				},
 			},
 		},
 		{
@@ -141,9 +129,12 @@ func TestTotalRelays(t *testing.T) {
 			from: now.AddDate(0, 0, -6),
 			to:   now.AddDate(0, 0, -2),
 			expected: TotalRelaysResponse{
-				From:  now.AddDate(0, 0, -6),
-				To:    now.AddDate(0, 0, -1),
-				Count: 5 * (2 + 1 + 5),
+				From: now.AddDate(0, 0, -6),
+				To:   now.AddDate(0, 0, -1),
+				Count: RelayCounts{
+					Success: 5 * (2 + 1 + 5),
+					Failure: 5 * (3 + 5 + 7),
+				},
 			},
 		},
 		{
@@ -151,9 +142,12 @@ func TestTotalRelays(t *testing.T) {
 			from: now,
 			to:   now,
 			expected: TotalRelaysResponse{
-				From:  now,
-				To:    now.AddDate(0, 0, 1),
-				Count: 500 + 30 + 50,
+				From: now,
+				To:   now.AddDate(0, 0, 1),
+				Count: RelayCounts{
+					Success: 50 + 30 + 500,
+					Failure: 40 + 70 + 700,
+				},
 			},
 		},
 	}
@@ -183,9 +177,12 @@ func TestTotalRelays(t *testing.T) {
 
 func TestAppRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
+	usageData := fakeDailyMetrics()
+	todaysUsage := fakeTodaysMetrics()
+	requestedApp := "app1"
+
 	testCases := []struct {
 		name                string
-		app                 string
 		from                time.Time
 		to                  time.Time
 		usageData           map[time.Time]map[string]int64
@@ -196,79 +193,50 @@ func TestAppRelays(t *testing.T) {
 	}{
 		{
 			name: "Correct count is returned",
-			app:  "app1",
 			from: now.AddDate(0, 0, -5),
 			to:   now.AddDate(0, 0, -1),
-			usageData: map[time.Time]map[string]int64{
-				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
-				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
-				now:                   {"app1": 1, "app2": 2},
-			},
 			expected: AppRelaysResponse{
-				Application: "app1",
+				Application: requestedApp,
 				From:        now.AddDate(0, 0, -5),
 				To:          now,
-				Count:       10,
+				Count: RelayCounts{
+					Success: 5 * 2,
+					Failure: 5 * 3,
+				},
 			},
 		},
 		{
 			name: "From and To parameters are adjusted to start of the specifed day and the next day, respectively",
-			app:  "app1",
 			from: time.Now().AddDate(0, 0, -5),
 			to:   time.Now().AddDate(0, 0, -1),
-			usageData: map[time.Time]map[string]int64{
-				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
-				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
-				now:                   {"app1": 1, "app2": 2},
-			},
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now.AddDate(0, 0, -5),
 				To:          now,
-				Count:       10,
+				Count: RelayCounts{
+					Success: 5 * 2,
+					Failure: 5 * 3,
+				},
 			},
 		},
 		{
 			name: "Equal values are allowed for From and To parameters (to cover a single day)",
-			app:  "app1",
 			from: now.AddDate(0, 0, -3),
 			to:   now.AddDate(0, 0, -3),
-			usageData: map[time.Time]map[string]int64{
-				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
-				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
-			},
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now.AddDate(0, 0, -3),
 				To:          now.AddDate(0, 0, -2),
-				Count:       2,
+				Count: RelayCounts{
+					Success: 1 * 2,
+					Failure: 1 * 3,
+				},
 			},
 		},
 		{
 			name: "Today's metrics are added to previous days' usage data",
-			app:  "app1",
 			from: now.AddDate(0, 0, -3),
 			to:   now,
-			usageData: map[time.Time]map[string]int64{
-				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
-				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
-			},
 			todaysUsage: map[string]int64{
 				"app1": 50,
 				"app2": 30,
@@ -277,130 +245,82 @@ func TestAppRelays(t *testing.T) {
 				Application: "app1",
 				From:        now.AddDate(0, 0, -3),
 				To:          now.AddDate(0, 0, 1),
-				Count:       56,
+				Count: RelayCounts{
+					Success: 3*2 + 50,
+					Failure: 3*3 + 40,
+				},
 			},
 		},
 		{
 			name: "Only today's data is included when from and to parameters point to today",
-			app:  "app1",
 			from: now,
 			to:   now,
-			usageData: map[time.Time]map[string]int64{
-				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
-				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
-			},
-			todaysUsage: map[string]int64{
-				"app1": 50,
-				"app2": 30,
-			},
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now,
 				To:          now.AddDate(0, 0, 1),
-				Count:       50,
+				Count: RelayCounts{
+					Success: 50,
+					Failure: 40,
+				},
 			},
 		},
 		{
 			name: "Today's metrics are not included when the 'to' parameter does not include today",
-			app:  "app1",
 			from: time.Now().AddDate(0, 0, -3),
 			to:   time.Now().AddDate(0, 0, -1),
-			usageData: map[time.Time]map[string]int64{
-				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
-				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
-			},
-			todaysUsage: map[string]int64{
-				"app1": 50,
-				"app2": 30,
-			},
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now.AddDate(0, 0, -3),
 				To:          now,
-				Count:       6,
+				Count: RelayCounts{
+					Success: 3 * 2,
+					Failure: 3 * 3,
+				},
 			},
 		},
 		{
 			name: "Today's metrics are included when the 'to' parameter is after today",
-			app:  "app1",
 			from: time.Now().AddDate(0, 0, -3),
 			to:   time.Now().AddDate(0, 0, 2),
-			usageData: map[time.Time]map[string]int64{
-				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
-				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
-			},
-			todaysUsage: map[string]int64{
-				"app1": 50,
-				"app2": 30,
-			},
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now.AddDate(0, 0, -3),
 				To:          now.AddDate(0, 0, 3),
-				Count:       56,
+				Count: RelayCounts{
+					Success: 3*2 + 50,
+					Failure: 3*3 + 40,
+				},
 			},
 		},
 		{
 			name: "Only today's metrics are included when the timespan only includes today",
-			app:  "app1",
 			from: time.Now(),
 			to:   time.Now().AddDate(0, 0, 2),
-			usageData: map[time.Time]map[string]int64{
-				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
-				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
-			},
-			todaysUsage: map[string]int64{
-				"app1": 50,
-				"app2": 30,
-			},
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now,
 				To:          now.AddDate(0, 0, 3),
-				Count:       50,
+				Count: RelayCounts{
+					Success: 50,
+					Failure: 40,
+				},
 			},
 		},
 		{
 			name: "Missing parameters' default values",
-			app:  "app1",
-			usageData: map[time.Time]map[string]int64{
-				now.AddDate(0, 0, -6): {"app1": 1, "app2": 1},
-				now.AddDate(0, 0, -5): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -4): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -3): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -2): {"app1": 2, "app2": 1},
-				now.AddDate(0, 0, -1): {"app1": 2, "app2": 1},
-			},
-			todaysUsage: map[string]int64{
-				"app1": 50,
-				"app2": 30,
-			},
 			expected: AppRelaysResponse{
 				Application: "app1",
 				From:        now.AddDate(0, 0, -30),
 				To:          now.AddDate(0, 0, 1),
-				Count:       61,
+				Count: RelayCounts{
+					Success: 6*2 + 50,
+					Failure: 6*3 + 40,
+				},
 			},
 		},
 		{
 			name:        "Invalid timespan is rejected",
-			app:         "app1",
 			from:        now.AddDate(0, 0, -1),
 			to:          now.AddDate(0, 0, -2),
 			expectedErr: fmt.Errorf("Invalid timespan"),
@@ -417,13 +337,13 @@ func TestAppRelays(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fakeBackend := fakeBackend{
-				usage:       tc.usageData,
-				todaysUsage: tc.todaysUsage,
+				usage:       usageData,
+				todaysUsage: todaysUsage,
 			}
 
 			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			got, err := relayMeter.AppRelays(tc.app, tc.from, tc.to)
+			got, err := relayMeter.AppRelays(requestedApp, tc.from, tc.to)
 			if err != nil {
 				if tc.expectedErr == nil {
 					t.Fatalf("Unexpected error: %v", err)
@@ -491,9 +411,9 @@ func TestStartDataLoader(t *testing.T) {
 }
 
 type fakeBackend struct {
-	usage       map[time.Time]map[string]int64
+	usage       map[time.Time]map[string]RelayCounts
 	err         error
-	todaysUsage map[string]int64
+	todaysUsage map[string]RelayCounts
 	userApps    map[string][]string
 
 	todaysMetricsCalls int
@@ -502,18 +422,41 @@ type fakeBackend struct {
 	dailyMetricsTo     time.Time
 }
 
-func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[string]int64, error) {
+func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error) {
 	f.dailyMetricsCalls++
 	f.dailyMetricsFrom = from
 	f.dailyMetricsTo = to
 	return f.usage, f.err
 }
 
-func (f *fakeBackend) TodaysUsage() (map[string]int64, error) {
+func (f *fakeBackend) TodaysUsage() (map[string]RelayCounts, error) {
 	f.todaysMetricsCalls++
 	return f.todaysUsage, nil
 }
 
 func (f *fakeBackend) UserApps(user string) ([]string, error) {
 	return f.userApps[user], nil
+}
+
+func fakeDailyMetrics() map[time.Time]map[string]RelayCounts {
+	dayMetrics := map[string]RelayCounts{
+		"app1": {Success: 2, Failure: 3},
+		"app2": {Success: 1, Failure: 5},
+		"app4": {Success: 5, Failure: 7},
+	}
+
+	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
+	metrics := make(map[time.Time]map[string]RelayCounts)
+	for i := 1; i < 7; i++ {
+		metrics[now.AddDate(0, 0, -1*i)] = dayMetrics
+	}
+	return metrics
+}
+
+func fakeTodaysMetrics() map[string]RelayCounts {
+	return map[string]RelayCounts{
+		"app1": {Success: 50, Failure: 40},
+		"app2": {Success: 30, Failure: 70},
+		"app4": {Success: 500, Failure: 700},
+	}
 }
