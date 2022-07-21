@@ -23,7 +23,30 @@ type RelayMeter interface {
 	// AppRelays returns total number of relays for the app over the specified time period
 	AppRelays(app string, from, to time.Time) (AppRelaysResponse, error)
 	// TODO: relays(user, timePeriod): returns total number of relays for all apps of the user over the specified time period (granularity roughly 1 day as a starting point)
-	// TODO: totalrelays(timePeriod)
+	UserRelays(user string, from, to time.Time) (UserRelaysResponse, error)
+	TotalRelays(from, to time.Time) (TotalRelaysResponse, error)
+}
+
+// TODO: refactor common fields
+type AppRelaysResponse struct {
+	Count       int64
+	From        time.Time
+	To          time.Time
+	Application string
+}
+
+type UserRelaysResponse struct {
+	Count        int64
+	From         time.Time
+	To           time.Time
+	User         string
+	Applications []string
+}
+
+type TotalRelaysResponse struct {
+	Count int64
+	From  time.Time
+	To    time.Time
 }
 
 type RelayMeterOptions struct {
@@ -37,6 +60,8 @@ type Backend interface {
 	//TODO: reverse map keys order, i.e. map[app]-> map[day]int64, at PG level
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]int64, error)
 	TodaysUsage() (map[string]int64, error)
+	// Is expected to return the list of applicationIDs owned by the user
+	UserApps(user string) ([]string, error)
 }
 
 func NewRelayMeter(backend Backend, logger *logger.Logger, options RelayMeterOptions) RelayMeter {
@@ -166,6 +191,104 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
 		total += r.todaysUsage[app]
+	}
+
+	resp.Count = total
+	resp.From = from
+	resp.To = to
+
+	return resp, nil
+}
+
+// TODO: refactor the common processing done by both AppRelays and UserRelays
+func (r *relayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResponse, error) {
+	r.Logger.WithFields(logger.Fields{"user": user, "from": from, "to": to}).Info("apiserver: Received UserRelays request")
+	resp := UserRelaysResponse{
+		From: from,
+		To:   to,
+		User: user,
+	}
+
+	// TODO: enforce MaxArchiveAge on From parameter
+	// TODO: enforce Today as maximum value for To parameter
+	from, to, err := AdjustTimePeriod(from, to)
+	if err != nil {
+		return resp, err
+	}
+
+	// Get today's date in day-only format
+	now := time.Now()
+	_, today, _ := AdjustTimePeriod(now, now)
+
+	apps, err := r.Backend.UserApps(user)
+	if err != nil {
+		return resp, err
+	}
+
+	r.rwMutex.RLock()
+	defer r.rwMutex.RUnlock()
+
+	var total int64
+	for day, counts := range r.dailyUsage {
+		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
+		if (day.After(from) || day.Equal(from)) && day.Before(to) {
+			for _, app := range apps {
+				total += counts[app]
+			}
+		}
+	}
+
+	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
+	if today.Equal(to) || today.Before(to) {
+		for _, app := range apps {
+			total += r.todaysUsage[app]
+		}
+	}
+
+	resp.Count = total
+	resp.From = from
+	resp.To = to
+	resp.Applications = apps
+
+	return resp, nil
+}
+
+func (r *relayMeter) TotalRelays(from, to time.Time) (TotalRelaysResponse, error) {
+	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received TotalRelays request")
+	resp := TotalRelaysResponse{
+		From: from,
+		To:   to,
+	}
+
+	// TODO: enforce MaxArchiveAge on From parameter
+	// TODO: enforce Today as maximum value for To parameter
+	from, to, err := AdjustTimePeriod(from, to)
+	if err != nil {
+		return resp, err
+	}
+
+	// Get today's date in day-only format
+	now := time.Now()
+	_, today, _ := AdjustTimePeriod(now, now)
+
+	r.rwMutex.RLock()
+	defer r.rwMutex.RUnlock()
+
+	var total int64
+	for day, counts := range r.dailyUsage {
+		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
+		if (day.After(from) || day.Equal(from)) && day.Before(to) {
+			for _, count := range counts {
+				total += count
+			}
+		}
+	}
+
+	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
+	if today.Equal(to) || today.Before(to) {
+		for _, count := range r.todaysUsage {
+			total += count
+		}
 	}
 
 	resp.Count = total

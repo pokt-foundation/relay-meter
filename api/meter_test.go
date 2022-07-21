@@ -11,6 +11,176 @@ import (
 	logger "github.com/sirupsen/logrus"
 )
 
+func TestUserRelays(t *testing.T) {
+	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
+	usageData := map[time.Time]map[string]int64{
+		now.AddDate(0, 0, -6): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -5): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -4): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -3): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -2): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -1): {"app1": 2, "app2": 1, "app4": 5},
+	}
+
+	todaysUsage := map[string]int64{
+		"app1": 50,
+		"app2": 30,
+		"app4": 500,
+	}
+
+	testCases := []struct {
+		name     string
+		user     string
+		from     time.Time
+		to       time.Time
+		expected UserRelaysResponse
+	}{
+		{
+			name: "Correct summary for a user",
+			user: "user1",
+			from: now.AddDate(0, 0, -6),
+			to:   now,
+			expected: UserRelaysResponse{
+				From:         now.AddDate(0, 0, -6),
+				To:           now.AddDate(0, 0, 1),
+				User:         "user1",
+				Applications: []string{"app1", "app2", "app3"},
+				Count:        98,
+			},
+		},
+		{
+			name: "Correct summary for a user excluding today",
+			user: "user1",
+			from: now.AddDate(0, 0, -6),
+			to:   now.AddDate(0, 0, -2),
+			expected: UserRelaysResponse{
+				From:         now.AddDate(0, 0, -6),
+				To:           now.AddDate(0, 0, -1),
+				User:         "user1",
+				Applications: []string{"app1", "app2", "app3"},
+				Count:        15,
+			},
+		},
+		{
+			name: "Correct summary for a user on todays metrics",
+			user: "user1",
+			from: now,
+			to:   now,
+			expected: UserRelaysResponse{
+				From:         now,
+				To:           now.AddDate(0, 0, 1),
+				User:         "user1",
+				Applications: []string{"app1", "app2", "app3"},
+				Count:        80,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fakeBackend := fakeBackend{
+				usage:       usageData,
+				todaysUsage: todaysUsage,
+				userApps: map[string][]string{
+					"user1": {"app1", "app2", "app3"},
+					"user2": {"app4", "app5", "app6"},
+				},
+			}
+
+			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			time.Sleep(200 * time.Millisecond)
+			got, err := relayMeter.UserRelays(tc.user, tc.from, tc.to)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.expected, got); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestTotalRelays(t *testing.T) {
+	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
+	usageData := map[time.Time]map[string]int64{
+		now.AddDate(0, 0, -6): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -5): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -4): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -3): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -2): {"app1": 2, "app2": 1, "app4": 5},
+		now.AddDate(0, 0, -1): {"app1": 2, "app2": 1, "app4": 5},
+	}
+
+	todaysUsage := map[string]int64{
+		"app1": 50,
+		"app2": 30,
+		"app4": 500,
+	}
+
+	testCases := []struct {
+		name     string
+		from     time.Time
+		to       time.Time
+		expected TotalRelaysResponse
+	}{
+		{
+			name: "Correct summary for the network",
+			from: now.AddDate(0, 0, -6),
+			to:   now,
+			expected: TotalRelaysResponse{
+				From:  now.AddDate(0, 0, -6),
+				To:    now.AddDate(0, 0, 1),
+				Count: 500 + 30 + 50 + 6*(2+1+5),
+			},
+		},
+		{
+			name: "Correct summary for the network excluding today",
+			from: now.AddDate(0, 0, -6),
+			to:   now.AddDate(0, 0, -2),
+			expected: TotalRelaysResponse{
+				From:  now.AddDate(0, 0, -6),
+				To:    now.AddDate(0, 0, -1),
+				Count: 5 * (2 + 1 + 5),
+			},
+		},
+		{
+			name: "Correct summary for the network on todays metrics",
+			from: now,
+			to:   now,
+			expected: TotalRelaysResponse{
+				From:  now,
+				To:    now.AddDate(0, 0, 1),
+				Count: 500 + 30 + 50,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fakeBackend := fakeBackend{
+				usage:       usageData,
+				todaysUsage: todaysUsage,
+			}
+
+			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			time.Sleep(200 * time.Millisecond)
+			got, err := relayMeter.TotalRelays(tc.from, tc.to)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.expected, got); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestAppRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
 	testCases := []struct {
@@ -324,6 +494,7 @@ type fakeBackend struct {
 	usage       map[time.Time]map[string]int64
 	err         error
 	todaysUsage map[string]int64
+	userApps    map[string][]string
 
 	todaysMetricsCalls int
 	dailyMetricsCalls  int
@@ -341,4 +512,8 @@ func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[string]i
 func (f *fakeBackend) TodaysUsage() (map[string]int64, error) {
 	f.todaysMetricsCalls++
 	return f.todaysUsage, nil
+}
+
+func (f *fakeBackend) UserApps(user string) ([]string, error) {
+	return f.userApps[user], nil
 }

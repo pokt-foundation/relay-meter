@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -25,6 +28,7 @@ const (
 	ENV_TODAYS_METRICS_TTL_SECONDS = "TODAYS_METRICS_TTL_SECONDS"
 	ENV_MAX_ARCHIVE_AGE_DAYS       = "MAX_ARCHIVE_AGE"
 	ENV_SERVER_PORT                = "API_SERVER_PORT"
+	ENV_BACKEND_API_URL            = "BACKEND_API_URL"
 )
 
 type options struct {
@@ -33,6 +37,7 @@ type options struct {
 	todaysMetricsTTLSeconds int
 	maxPastDays             int
 	port                    int
+	backendApiUrl           string
 }
 
 func gatherOptions() (options, error) {
@@ -57,7 +62,42 @@ func gatherOptions() (options, error) {
 		}
 		*o.value = value
 	}
+
+	backendUrl := os.Getenv(ENV_BACKEND_API_URL)
+	if backendUrl == "" {
+		return options, fmt.Errorf("Missing required environment variable: %s", ENV_BACKEND_API_URL)
+	}
+	options.backendApiUrl = backendUrl
 	return options, nil
+}
+
+type backendProvider struct {
+	db.PostgresClient
+	backendApiUrl string
+}
+
+func (b *backendProvider) UserApps(user string) ([]string, error) {
+	// TODO: add a timeout
+	v := url.Values{}
+	v.Add("USER", user)
+	resp, err := http.Get(fmt.Sprintf("%s/users?%s", b.backendApiUrl, v.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var userApps struct {
+		User         string
+		Applications []string
+	}
+
+	if err := json.Unmarshal(body, &userApps); err != nil {
+		return nil, err
+	}
+	return userApps.Applications, nil
 }
 
 // TODO: need a /health endpoint
@@ -85,7 +125,12 @@ func main() {
 		MaxPastDays:      time.Duration(options.maxPastDays) * 24 * time.Hour,
 	}
 	log.WithFields(logger.Fields{"postgresOptions": postgresOptions, "meterOptions": meterOptions}).Info("Gathered options.")
-	meter := api.NewRelayMeter(pgClient, log, meterOptions)
+
+	backend := backendProvider{
+		PostgresClient: pgClient,
+		backendApiUrl:  options.backendApiUrl,
+	}
+	meter := api.NewRelayMeter(&backend, log, meterOptions)
 	http.HandleFunc("/", api.GetHttpServer(meter, log))
 
 	log.Info("Starting the apiserver...")

@@ -21,7 +21,7 @@ var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
 	appsRelaysPath  = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
 	usersRelaysPath = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
-	totalRelaysPath = regexp.MustCompile(`^/v0/relays/summary`)
+	totalRelaysPath = regexp.MustCompile(`^/v0/relays`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -32,19 +32,32 @@ var (
 	InvalidRequest ApiError = fmt.Errorf("Invalid request")
 )
 
-// TODO: move to the meter package
-type AppRelaysResponse struct {
-	Count       int64
-	From        time.Time
-	To          time.Time
-	Application string
-}
-
 type ErrorResponse struct {
 	Message string
 }
 
 func handleAppRelays(meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.AppRelays(app, from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleUserRelays(meter RelayMeter, l *logger.Logger, user string, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.UserRelays(user, from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleTotalRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.TotalRelays(from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleEndpoint(l *logger.Logger, meterEndpoint func(from, to time.Time) (any, error), w http.ResponseWriter, req *http.Request) {
 	log := l.WithFields(logger.Fields{"Request": req})
 	w.Header().Add("Content-Type", "application/json")
 
@@ -56,32 +69,32 @@ func handleAppRelays(meter RelayMeter, l *logger.Logger, app string, w http.Resp
 	}
 
 	// TODO: separate Internal errors from Request errors using custom errors returned by the meter service
-	// Note: This is intentionally placed before request error processing: an internal server error is higher priority for reporting.
-	appRelays, meterErr := meter.AppRelays(app, from, to)
-	bytes, err := json.Marshal(appRelays)
+	meterResponse, meterErr := meterEndpoint(from, to)
+	if meterErr != nil {
+		errLogger := l.WithFields(logger.Fields{"error": meterErr})
+
+		switch {
+		case meterErr != nil && errors.Is(meterErr, InvalidRequest):
+			errLogger.Warn("Invalid request")
+			http.Error(w, fmt.Sprintf("Bad request: %v", meterErr), http.StatusBadRequest)
+		case meterErr != nil && errors.Is(meterErr, AppNotFound):
+			errLogger.Warn("Invalid request: application not found")
+			http.Error(w, fmt.Sprintf("Bad request: %v", meterErr), http.StatusBadRequest)
+		default:
+			errLogger.Warn("Internal server error")
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	bytes, err := json.Marshal(meterResponse)
 	if err != nil {
 		log.WithFields(logger.Fields{"error": err}).Warn("Internal error marshalling response")
 		http.Error(w, fmt.Sprintf("Internal error marshalling the response %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	var errLogger *logger.Entry
-	if meterErr != nil {
-		errLogger = log.WithFields(logger.Fields{"error": meterErr})
-	}
-	switch {
-	case meterErr != nil && errors.Is(meterErr, InvalidRequest):
-		errLogger.Warn("Invalid request")
-		w.WriteHeader(http.StatusBadRequest)
-	case meterErr != nil && errors.Is(meterErr, AppNotFound):
-		errLogger.Warn("Invalid request: application not found")
-		w.WriteHeader(http.StatusBadRequest)
-	case meterErr != nil:
-		errLogger.Warn("Internal server error")
-		w.WriteHeader(http.StatusInternalServerError)
-	default:
-		w.WriteHeader(http.StatusOK)
-	}
+	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, string(bytes))
 }
 
@@ -136,18 +149,20 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 			http.Error(w, fmt.Sprintf("Incorrect request method, expected: %s, got: %s", http.MethodPost, req.Method), http.StatusBadRequest)
 		}
 
-		/*
-			if totalRelaysPath.Match([]byte(req.URL.Path)) {
-				return handleTotalRelays()
-			}*/
 		if appID := match(appsRelaysPath, req.URL.Path); appID != "" {
 			handleAppRelays(meter, l, appID, w, req)
 			return
 		}
-		/*
-			if userID := match(usersRelaysPath, req.URL.Path); userID != "" {
-				return handleUsersRelays()
-			}*/
+
+		if userID := match(usersRelaysPath, req.URL.Path); userID != "" {
+			handleUserRelays(meter, l, userID, w, req)
+			return
+		}
+
+		if totalRelaysPath.Match([]byte(req.URL.Path)) {
+			handleTotalRelays(meter, l, w, req)
+			return
+		}
 
 		log.Warn("Invalid request endpoint")
 		bytes, err := json.Marshal(ErrorResponse{Message: fmt.Sprintf("Invalid request path: %s", req.URL.Path)})
