@@ -84,7 +84,7 @@ jobs:
         with:
           task-definition: ${{ steps.task-def-us-west-2-collector.outputs.task-definition }}
           container-name: relay-meter-server
-          image: ${{ steps.build-image-server.outputs.image }}
+          image: ${{ steps.build-image-api-server.outputs.image }}
 
       - name: Deploy / us-west-2
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
