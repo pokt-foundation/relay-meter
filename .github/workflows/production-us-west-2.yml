@@ -2,7 +2,7 @@ name: Production deployment us-west-2
 
 on:
   push:
-    branches: [deployment]
+    branches: [main]
 
 jobs:
   deploy:
