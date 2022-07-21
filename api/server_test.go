@@ -143,6 +143,11 @@ func TestHandleAppRelays(t *testing.T) {
 				t.Errorf("Expected status code: %d, got: %d", tc.expectedStatusCode, resp.StatusCode)
 			}
 
+			// TODO: Should we return json even if there is a request/internal server error?
+			if tc.expectedStatusCode != http.StatusOK {
+				return
+			}
+
 			if resp.Header.Get("Content-Type") != "application/json" {
 				t.Errorf("Expected Content-Type: %s, got: %s", "application/json", resp.Header.Get("Content-Type"))
 			}
@@ -173,6 +178,14 @@ func (f *fakeRelayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRes
 	f.requestedApp = app
 
 	return f.response, f.responseErr
+}
+
+func (f *fakeRelayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResponse, error) {
+	return UserRelaysResponse{}, nil
+}
+
+func (f *fakeRelayMeter) TotalRelays(from, to time.Time) (TotalRelaysResponse, error) {
+	return TotalRelaysResponse{}, nil
 }
 
 func TestTimePeriod(t *testing.T) {
