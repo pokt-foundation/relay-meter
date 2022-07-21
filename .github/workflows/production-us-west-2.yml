@@ -38,6 +38,7 @@ jobs:
 
           # API container
           API_SERVER_PORT: 9898
+          BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
 
           # Shared envs
           POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
