@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -13,11 +14,10 @@ import (
 )
 
 type Source interface {
-	AppRelays(from, to time.Time) (map[string]int64, error)
-	// UserRelays(period time.Duration) (map[string]int, error)
-	DailyCounts(from, to time.Time) (map[time.Time]map[string]int64, error)
+	AppRelays(from, to time.Time) (map[string]api.RelayCounts, error)
+	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	// Returns application metrics for today so far
-	TodaysCounts() (map[string]int64, error)
+	TodaysCounts() (map[string]api.RelayCounts, error)
 }
 
 type InfluxDBOptions struct {
@@ -40,7 +40,7 @@ type influxDB struct {
 
 // DailyCounts Returns total of number of daily relays per application, up to and including the specified day
 //	Each app will have an entry per day
-func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int64, error) {
+func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI(i.Options.Org)
 
@@ -50,7 +50,7 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int
 		return nil, err
 	}
 
-	dailyCounts := make(map[time.Time]map[string]int64)
+	dailyCounts := make(map[time.Time]map[string]api.RelayCounts)
 	// TODO: the influx doc seems to have a bug when describing the 'stop' parameter of range function,
 	//	i.e. it says "Results exclude rows with _time values that match the specified start time.", likely meant to say 'stop time'
 	//	https://docs.influxdata.com/flux/v0.x/stdlib/universe/range/
@@ -62,15 +62,15 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int
 			fmt.Sprintf(" |> range(start: %s, stop: %s)", current.Format(time.RFC3339), current.AddDate(0, 0, 1).Format(time.RFC3339)) +
 			fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
 			fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
-			fmt.Sprintf(" |> group(columns: [%q])", "applicationPublicKey") +
-			" |> sum()"
+			fmt.Sprintf(" |> group(columns: [%q, %q])", "applicationPublicKey", "result") +
+			fmt.Sprintf(" |> keep(columns: [%q, %q, %q])", "applicationPublicKey", "result", "_value")
 
 		result, err := queryAPI.Query(context.Background(), query)
 		if err != nil {
 			return nil, err
 		}
 
-		counts := make(map[string]int64)
+		counts := make(map[string]api.RelayCounts)
 		// Iterate over query response
 		for result.Next() {
 			app, ok := result.Record().ValueByKey("applicationPublicKey").(string)
@@ -93,7 +93,15 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int
 			}
 
 			// TODO: log app + count + time
-			counts[app] += int64(count)
+			relayResult, ok := result.Record().ValueByKey("result").(string)
+			if !ok {
+				return nil, fmt.Errorf("Error parsing relay result: %v", result.Record().ValueByKey("result"))
+			}
+			updatedCount, err := updateRelayCount(counts[app], relayResult, count)
+			if err != nil {
+				return nil, err
+			}
+			counts[app] = updatedCount
 		}
 		// check for an error
 		if result.Err() != nil {
@@ -106,18 +114,19 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]int
 	return dailyCounts, nil
 }
 
-func (i *influxDB) TodaysCounts() (map[string]int64, error) {
+// TODO: Refactor out the parts of the logic common between TodaysCounts and DailyCounts
+func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI(i.Options.Org)
 
-	counts := make(map[string]int64)
+	counts := make(map[string]api.RelayCounts)
 	// TODO: send queries in parallel
 	query := fmt.Sprintf("from(bucket: %q)", i.Options.CurrentBucket) +
 		fmt.Sprintf(" |> range(start: %s)", startOfDay(time.Now()).Format(time.RFC3339)) +
 		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
 		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
-		fmt.Sprintf(" |> group(columns: [%q])", "applicationPublicKey") +
-		" |> sum()"
+		fmt.Sprintf(" |> group(columns: [%q, %q])", "applicationPublicKey", "result") +
+		fmt.Sprintf(" |> keep(columns: [%q, %q, %q])", "applicationPublicKey", "result", "_value")
 
 	result, err := queryAPI.Query(context.Background(), query)
 	if err != nil {
@@ -146,7 +155,15 @@ func (i *influxDB) TodaysCounts() (map[string]int64, error) {
 		}
 
 		// TODO: log app + count + time
-		counts[app] += int64(count)
+		relayResult, ok := result.Record().ValueByKey("result").(string)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing relay result: %v", result.Record().ValueByKey("result"))
+		}
+		updatedCount, err := updateRelayCount(counts[app], relayResult, count)
+		if err != nil {
+			return nil, err
+		}
+		counts[app] = updatedCount
 	}
 	// check for an error
 	if result.Err() != nil {
@@ -157,7 +174,20 @@ func (i *influxDB) TodaysCounts() (map[string]int64, error) {
 	return counts, nil
 }
 
-func (i *influxDB) AppRelays(from, to time.Time) (map[string]int64, error) {
+func updateRelayCount(current api.RelayCounts, relayResult string, count int64) (api.RelayCounts, error) {
+	switch {
+	case relayResult == fmt.Sprintf("%d", http.StatusOK):
+		current.Success += int64(count)
+	case relayResult == fmt.Sprintf("%d", http.StatusInternalServerError):
+		current.Failure += int64(count)
+	default:
+		return api.RelayCounts{}, fmt.Errorf("Invalid value in result field: %s", relayResult)
+	}
+	return current, nil
+}
+
+// TODO: Remove this and all references.
+func (i *influxDB) AppRelays(from, to time.Time) (map[string]api.RelayCounts, error) {
 	// Create a new client using an InfluxDB server base URL and an authentication token
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	// Get query client
@@ -171,7 +201,7 @@ func (i *influxDB) AppRelays(from, to time.Time) (map[string]int64, error) {
 		return nil, err
 	}
 
-	counts := make(map[string]int64)
+	counts := make(map[string]api.RelayCounts)
 
 	// Iterate over query response
 	for result.Next() {
@@ -193,7 +223,7 @@ func (i *influxDB) AppRelays(from, to time.Time) (map[string]int64, error) {
 			return nil, fmt.Errorf("Error parsing application %s relay counts %v", app, result.Record().Value())
 		}
 		// TODO: log app + count + time
-		counts[app] = count
+		counts[app] = api.RelayCounts{Success: count}
 	}
 
 	// check for an error

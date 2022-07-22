@@ -6,6 +6,8 @@ import (
 	"time"
 
 	logger "github.com/sirupsen/logrus"
+
+	"github.com/adshmh/meter/api"
 )
 
 func TestCollect(t *testing.T) {
@@ -16,41 +18,41 @@ func TestCollect(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name                 string
-		maxArchiveAge        time.Duration
-		firstSaved           time.Time
-		lastSaved            time.Time
-		expectedFrom         time.Time
-		expectedTo           time.Time
-		shouldCollectDaily   bool
+		name               string
+		maxArchiveAge      time.Duration
+		firstSaved         time.Time
+		lastSaved          time.Time
+		expectedFrom       time.Time
+		expectedTo         time.Time
+		shouldCollectDaily bool
 	}{
 		{
-			name:                 "Default values for start and end",
-			maxArchiveAge:        30 * 24 * time.Hour,
-			shouldCollectDaily:   true,
-			expectedFrom:         today.Add(-30 * 24 * time.Hour),
-			expectedTo:           today.AddDate(0, 0, 1),
+			name:               "Default values for start and end",
+			maxArchiveAge:      30 * 24 * time.Hour,
+			shouldCollectDaily: true,
+			expectedFrom:       today.Add(-30 * 24 * time.Hour),
+			expectedTo:         today.AddDate(0, 0, 1),
 		},
 		{
-			name:                 "Previous days with existing metrics are skipped",
-			maxArchiveAge:        30 * 24 * time.Hour,
-			firstSaved:           today.AddDate(0, 0, -40),
-			lastSaved:            today.AddDate(0, 0, -10),
-			shouldCollectDaily:   true,
-			expectedFrom:         today.AddDate(0, 0, -9),
-			expectedTo:           today.AddDate(0, 0, 1),
+			name:               "Previous days with existing metrics are skipped",
+			maxArchiveAge:      30 * 24 * time.Hour,
+			firstSaved:         today.AddDate(0, 0, -40),
+			lastSaved:          today.AddDate(0, 0, -10),
+			shouldCollectDaily: true,
+			expectedFrom:       today.AddDate(0, 0, -9),
+			expectedTo:         today.AddDate(0, 0, 1),
 		},
 		{
-			name:		      "Daily metrics are skipped altogether if yesterday's data already collected",
-			maxArchiveAge:        30 * 24 * time.Hour,
-			firstSaved:           today.AddDate(0, 0, -40),
-			lastSaved:            today.AddDate(0, 0, -1),
+			name:          "Daily metrics are skipped altogether if yesterday's data already collected",
+			maxArchiveAge: 30 * 24 * time.Hour,
+			firstSaved:    today.AddDate(0, 0, -40),
+			lastSaved:     today.AddDate(0, 0, -1),
 		},
 		{
-			name:                 "Today is not skipped even if metrics are saved for it",
-			maxArchiveAge:        30 * 24 * time.Hour,
-			firstSaved:           today.AddDate(0, 0, -40),
-			lastSaved:            today,
+			name:          "Today is not skipped even if metrics are saved for it",
+			maxArchiveAge: 30 * 24 * time.Hour,
+			firstSaved:    today.AddDate(0, 0, -40),
+			lastSaved:     today,
 		},
 	}
 
@@ -142,22 +144,22 @@ type fakeSource struct {
 	requestedFrom time.Time
 	requestedTo   time.Time
 
-	response    map[time.Time]map[string]int64
+	response    map[time.Time]map[string]api.RelayCounts
 	responseErr error
 
-	todaysCounts map[string]int64
+	todaysCounts           map[string]api.RelayCounts
 	todaysMetricsCollected bool
-	dailyMetricsCollected bool
+	dailyMetricsCollected  bool
 }
 
-func (f *fakeSource) DailyCounts(from, to time.Time) (map[time.Time]map[string]int64, error) {
+func (f *fakeSource) DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error) {
 	f.dailyMetricsCollected = true
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.response, f.responseErr
 }
 
-func (f *fakeSource) TodaysCounts() (map[string]int64, error) {
+func (f *fakeSource) TodaysCounts() (map[string]api.RelayCounts, error) {
 	f.todaysMetricsCollected = true
 	return f.todaysCounts, nil
 }
@@ -174,11 +176,11 @@ func (f *fakeWriter) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	return f.first, f.last, nil
 }
 
-func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]int64) error {
+func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts) error {
 	return nil
 }
 
-func (f *fakeWriter) WriteTodaysUsage(counts map[string]int64) error {
+func (f *fakeWriter) WriteTodaysUsage(counts map[string]api.RelayCounts) error {
 	f.todaysWrites++
 	return nil
 }
