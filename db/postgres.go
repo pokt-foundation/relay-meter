@@ -11,6 +11,8 @@ import (
 
 	"database/sql"
 	_ "github.com/lib/pq"
+
+	"github.com/adshmh/meter/api"
 )
 
 // TODO: db package needs some form of unit testing
@@ -22,21 +24,17 @@ const (
 // Will be implemented by Postgres DB interface
 type Reporter interface {
 	// DailyUsage returns saved daily metrics for the specified time period, with each day being an entry in the results map
-	DailyUsage(from, to time.Time) (map[time.Time]map[string]int64, error)
+	DailyUsage(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	// TodaysUsage returns the metrics for today so far
-	TodaysUsage() (map[string]int64, error)
+	TodaysUsage() (map[string]api.RelayCounts, error)
 }
 
 // Will be implemented by Postgres DB interface
 type Writer interface {
-	// WriteUsage writes the specified relay counts to the underlying storage.
-	//	It also writes the lastCounted to the underlying storage to keep track of most recent run of the meter.
-	WriteUsage(counts map[string]int64, lastCounted time.Time) error
-	// TODO: function to read entries, needed by the rollover
 	// TODO: rollover of entries
-	WriteDailyUsage(counts map[time.Time]map[string]int64) error
+	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts) error
 	// WriteTodaysUsage writes todays relay counts to the underlying storage.
-	WriteTodaysUsage(counts map[string]int64) error
+	WriteTodaysUsage(counts map[string]api.RelayCounts) error
 	// Returns oldest and most recent timestamps for stored metrics
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
 }
@@ -68,10 +66,10 @@ type pgClient struct {
 	*sql.DB
 }
 
-func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]int64, error) {
+func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error) {
 	ctx := context.Background()
 	// TODO: delegate dealing with the timestamps to the sql query: looks like there is a bug in QueryContext in dealing with parameters
-	q := fmt.Sprintf("SELECT (time, application, count) FROM daily_app_sums as d WHERE d.time >= '%s' and d.time <= '%s'",
+	q := fmt.Sprintf("SELECT (time, application, count_success, count_failure) FROM daily_app_sums as d WHERE d.time >= '%s' and d.time <= '%s'",
 		from.Format(DAY_LAYOUT),
 		to.Format(DAY_LAYOUT),
 	)
@@ -82,7 +80,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]int6
 	defer rows.Close()
 
 	const timeFormat = "2006-01-02 15:04:00+00"
-	dailyUsage := make(map[time.Time]map[string]int64)
+	dailyUsage := make(map[time.Time]map[string]api.RelayCounts)
 	for rows.Next() {
 		var r string
 		if err := rows.Scan(&r); err != nil {
@@ -95,7 +93,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]int6
 		r = strings.TrimPrefix(r, "(")
 		r = strings.TrimSuffix(r, ")")
 		items := strings.Split(r, ",")
-		if len(items) != 3 {
+		if len(items) != 4 {
 			return nil, fmt.Errorf("Invalid format in query output: %s", r)
 		}
 
@@ -103,9 +101,13 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]int6
 		if err != nil {
 			return nil, fmt.Errorf("Invalid time format: %s in query result line: %s, error: %v", items[0], r, err)
 		}
-		count, err := strconv.ParseInt(items[2], 10, 64) // bitsize 64 for int64 return
+		count_success, err := strconv.ParseInt(items[2], 10, 64) // bitsize 64 for int64 return
 		if err != nil {
 			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[2], r, err)
+		}
+		count_failure, err := strconv.ParseInt(items[3], 10, 64) // bitsize 64 for int64 return
+		if err != nil {
+			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[3], r, err)
 		}
 		app := items[1]
 		if app == "" {
@@ -113,9 +115,9 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]int6
 		}
 
 		if dailyUsage[ts] == nil {
-			dailyUsage[ts] = make(map[string]int64)
+			dailyUsage[ts] = make(map[string]api.RelayCounts)
 		}
-		dailyUsage[ts][app] = count
+		dailyUsage[ts][app] = api.RelayCounts{Success: count_success, Failure: count_failure}
 	}
 	// TODO: verify this is needed
 	if rerr := rows.Close(); rerr != nil {
@@ -129,7 +131,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]int6
 	return dailyUsage, nil
 }
 
-func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]int64) error {
+func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -139,8 +141,10 @@ func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]int64) error 
 
 	// TODO: bulk insert
 	for day, appCounts := range counts {
-		for app, count := range appCounts {
-			_, execErr := tx.ExecContext(ctx, "INSERT INTO daily_app_sums(application, count, time) VALUES($1, $2, $3);", app, count, day)
+		for app, counts := range appCounts {
+			_, execErr := tx.ExecContext(ctx,
+				"INSERT INTO daily_app_sums(application, count_success, count_failure, time) VALUES($1, $2, $3, $4);",
+				app, counts.Success, counts.Failure, day)
 			if execErr != nil {
 				if rollbackErr := tx.Rollback(); rollbackErr != nil {
 					fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
@@ -148,32 +152,6 @@ func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]int64) error 
 				}
 				fmt.Printf("update failed: %v", execErr)
 			}
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (p *pgClient) WriteUsage(counts map[string]int64, lastCounted time.Time) error {
-	ctx := context.Background()
-	// TODO: determine required isolation level
-	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return err
-	}
-
-	// TODO: bulk insert
-	for app, count := range counts {
-		_, execErr := tx.ExecContext(ctx, "INSERT INTO relay_counts(application, count, time) VALUES($1, $2, $3);", app, count, lastCounted)
-		if execErr != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
-				return execErr
-			}
-			fmt.Printf("update failed: %v", execErr)
 		}
 	}
 
@@ -205,7 +183,7 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
 //	All the entries in the table holding todays metrics are deleted first.
-func (p *pgClient) WriteTodaysUsage(counts map[string]int64) error {
+func (p *pgClient) WriteTodaysUsage(counts map[string]api.RelayCounts) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -224,7 +202,9 @@ func (p *pgClient) WriteTodaysUsage(counts map[string]int64) error {
 
 	// TODO: bulk insert
 	for app, count := range counts {
-		_, execErr := tx.ExecContext(ctx, "INSERT INTO todays_app_sums(application, count) VALUES($1, $2);", app, count)
+		_, execErr := tx.ExecContext(ctx,
+			"INSERT INTO todays_app_sums(application, count_success, count_failure) VALUES($1, $2, $3);",
+			app, count.Success, count.Failure)
 		if execErr != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
 				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
@@ -241,16 +221,16 @@ func (p *pgClient) WriteTodaysUsage(counts map[string]int64) error {
 }
 
 // TodaysUsage returns the current day's metrics so far.
-func (pg *pgClient) TodaysUsage() (map[string]int64, error) {
+func (pg *pgClient) TodaysUsage() (map[string]api.RelayCounts, error) {
 	// TODO: factor-out the SQL statements
 	ctx := context.Background()
-	rows, err := pg.DB.QueryContext(ctx, "SELECT (application, count) FROM todays_app_sums")
+	rows, err := pg.DB.QueryContext(ctx, "SELECT (application, count_success, count_failure) FROM todays_app_sums")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	todaysUsage := make(map[string]int64)
+	todaysUsage := make(map[string]api.RelayCounts)
 	for rows.Next() {
 		var r string
 		if err := rows.Scan(&r); err != nil {
@@ -263,20 +243,24 @@ func (pg *pgClient) TodaysUsage() (map[string]int64, error) {
 		r = strings.TrimPrefix(r, "(")
 		r = strings.TrimSuffix(r, ")")
 		items := strings.Split(r, ",")
-		if len(items) != 2 {
+		if len(items) != 3 {
 			return nil, fmt.Errorf("Invalid format in query output: %s", r)
 		}
 
-		count, err := strconv.ParseInt(items[1], 10, 64) // bitsize 64 for int64 return
+		count_success, err := strconv.ParseInt(items[1], 10, 64) // bitsize 64 for int64 return
 		if err != nil {
 			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[1], r, err)
+		}
+		count_failure, err := strconv.ParseInt(items[2], 10, 64) // bitsize 64 for int64 return
+		if err != nil {
+			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[2], r, err)
 		}
 		app := items[0]
 		if app == "" {
 			return nil, fmt.Errorf("Empty application public key, in query result line: %s", r)
 		}
 
-		todaysUsage[app] = count
+		todaysUsage[app] = api.RelayCounts{Success: count_success, Failure: count_failure}
 	}
 	// TODO: verify this is needed
 	if rerr := rows.Close(); rerr != nil {
