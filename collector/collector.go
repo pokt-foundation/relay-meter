@@ -62,10 +62,12 @@ type collector struct {
 // Collects relay usage data from the source and uses the writer to store.
 //	-
 func (c *collector) Collect(from, to time.Time) error {
-	from, to, err := api.AdjustTimePeriod(from, time.Now())
+	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting daily metrics collection...")
+	from, to, err := api.AdjustTimePeriod(from, to)
 	if err != nil {
 		return err
 	}
+	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Daily metrics collection period adjusted.")
 
 	counts, err := c.Source.DailyCounts(from, to)
 	if err != nil {
@@ -118,7 +120,8 @@ func (c *collector) collect() error {
 		}
 	}
 
-	return c.Collect(from, time.Now())
+	// TODO: cover with unit tests
+	return c.Collect(from, time.Now().AddDate(0, 0, -1))
 }
 
 func (c *collector) Start(ctx context.Context, collectIntervalSeconds, reportIntervalSeconds int) {
