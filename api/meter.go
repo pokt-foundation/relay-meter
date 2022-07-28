@@ -229,6 +229,7 @@ func (r *relayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResp
 
 	apps, err := r.Backend.UserApps(user)
 	if err != nil {
+		r.Logger.WithFields(logger.Fields{"user": user, "from": from, "to": to, "error": err}).Warn("Error getting user applications processing UserRelays request")
 		return resp, err
 	}
 

@@ -45,10 +45,6 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api
 	queryAPI := client.QueryAPI(i.Options.Org)
 
 	// Loop on days
-	startDay, endDay, err := api.AdjustTimePeriod(from, to)
-	if err != nil {
-		return nil, err
-	}
 
 	dailyCounts := make(map[time.Time]map[string]api.RelayCounts)
 	// TODO: the influx doc seems to have a bug when describing the 'stop' parameter of range function,
@@ -57,7 +53,8 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api
 	// 	--> this needs verification to make sure we do not double-count the last second of each day
 
 	// TODO: send queries in parallel
-	for current := startDay; current.Before(endDay); current = current.AddDate(0, 0, 1) {
+	// TODO: use 'sum' in the influx query to reduce the number of returned data points
+	for current := from; current.Before(to); current = current.AddDate(0, 0, 1) {
 		query := fmt.Sprintf("from(bucket: %q)", i.Options.DailyBucket) +
 			fmt.Sprintf(" |> range(start: %s, stop: %s)", current.Format(time.RFC3339), current.AddDate(0, 0, 1).Format(time.RFC3339)) +
 			fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
@@ -125,8 +122,9 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 		fmt.Sprintf(" |> range(start: %s)", startOfDay(time.Now()).Format(time.RFC3339)) +
 		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
 		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
+		fmt.Sprintf(" |> keep(columns: [%q, %q, %q])", "applicationPublicKey", "result", "_value") +
 		fmt.Sprintf(" |> group(columns: [%q, %q])", "applicationPublicKey", "result") +
-		fmt.Sprintf(" |> keep(columns: [%q, %q, %q])", "applicationPublicKey", "result", "_value")
+		fmt.Sprintf(" |> sum()")
 
 	result, err := queryAPI.Query(context.Background(), query)
 	if err != nil {
