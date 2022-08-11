@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 
 	logger "github.com/sirupsen/logrus"
 
+	"github.com/pokt-foundation/portal-api-go/repository"
+
+	// TODO: replace with pokt-foundation/relay-meter
 	"github.com/adshmh/meter/api"
 	"github.com/adshmh/meter/cmd"
 	"github.com/adshmh/meter/db"
@@ -29,6 +32,7 @@ const (
 	ENV_MAX_ARCHIVE_AGE_DAYS       = "MAX_ARCHIVE_AGE"
 	ENV_SERVER_PORT                = "API_SERVER_PORT"
 	ENV_BACKEND_API_URL            = "BACKEND_API_URL"
+	ENV_BACKEND_API_TOKEN          = "BACKEND_API_TOKEN"
 )
 
 type options struct {
@@ -38,6 +42,7 @@ type options struct {
 	maxPastDays             int
 	port                    int
 	backendApiUrl           string
+	backendApiToken         string
 }
 
 func gatherOptions() (options, error) {
@@ -68,19 +73,30 @@ func gatherOptions() (options, error) {
 		return options, fmt.Errorf("Missing required environment variable: %s", ENV_BACKEND_API_URL)
 	}
 	options.backendApiUrl = backendUrl
+
+	token := os.Getenv(ENV_BACKEND_API_TOKEN)
+	if token == "" {
+		return options, fmt.Errorf("Missing required environment variable: %s", ENV_BACKEND_API_TOKEN)
+	}
+	options.backendApiToken = token
+
 	return options, nil
 }
 
 type backendProvider struct {
 	db.PostgresClient
-	backendApiUrl string
+	backendApiUrl   string
+	backendApiToken string
 }
 
 func (b *backendProvider) UserApps(user string) ([]string, error) {
-	// TODO: add a timeout
-	v := url.Values{}
-	v.Add("USER", user)
-	resp, err := http.Get(fmt.Sprintf("%s/users?%s", b.backendApiUrl, v.Encode()))
+	// TODO: make the timeout configurable
+	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/user/%s/application", b.backendApiUrl, user), nil)
+	req.Header.Add("Authorization", b.backendApiToken)
+
+	client := http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -88,16 +104,28 @@ func (b *backendProvider) UserApps(user string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	var userApps struct {
-		User         string
-		Applications []string
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Error from backend apiserver: %d, %s", resp.StatusCode, string(body))
 	}
 
+	var userApps []repository.Application
 	if err := json.Unmarshal(body, &userApps); err != nil {
 		return nil, err
 	}
-	return userApps.Applications, nil
+
+	var applications []string
+	for _, app := range userApps {
+		if app.FreeTier {
+			if app.FreeTierAAT.ApplicationPublicKey != "" {
+				applications = append(applications, app.FreeTierAAT.ApplicationPublicKey)
+			}
+		} else {
+			if app.GatewayAAT.ApplicationPublicKey != "" {
+				applications = append(applications, app.GatewayAAT.ApplicationPublicKey)
+			}
+		}
+	}
+	return applications, nil
 }
 
 // TODO: need a /health endpoint
@@ -127,8 +155,9 @@ func main() {
 	log.WithFields(logger.Fields{"postgresOptions": postgresOptions, "meterOptions": meterOptions}).Info("Gathered options.")
 
 	backend := backendProvider{
-		PostgresClient: pgClient,
-		backendApiUrl:  options.backendApiUrl,
+		PostgresClient:  pgClient,
+		backendApiUrl:   options.backendApiUrl,
+		backendApiToken: options.backendApiToken,
 	}
 	meter := api.NewRelayMeter(&backend, log, meterOptions)
 	http.HandleFunc("/", api.GetHttpServer(meter, log))
