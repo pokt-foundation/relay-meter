@@ -193,14 +193,14 @@ func TestHandleAllAppsRelays(t *testing.T) {
 
 	testCases := []struct {
 		name               string
-		meterResponse      map[string]AppRelaysResponse
+		meterResponse      []AppRelaysResponse
 		meterErr           error
 		expectedStatusCode int
 	}{
 		{
 			name: "Correct number of relays is returned",
-			meterResponse: map[string]AppRelaysResponse{
-				"app1": {
+			meterResponse: []AppRelaysResponse{
+				{
 					Application: "app1",
 					From:        now.AddDate(0, 0, -30),
 					To:          now.AddDate(0, 0, 1),
@@ -265,8 +265,7 @@ func TestHandleAllAppsRelays(t *testing.T) {
 				t.Errorf("Expected Content-Type: %s, got: %s", "application/json", resp.Header.Get("Content-Type"))
 			}
 
-			var r map[string]AppRelaysResponse
-			fmt.Println(string(body))
+			var r []AppRelaysResponse
 			if err := json.Unmarshal(body, &r); err != nil {
 				t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
 			}
@@ -284,7 +283,7 @@ type fakeRelayMeter struct {
 	requestedApp  string
 
 	response    AppRelaysResponse
-	allResponse map[string]AppRelaysResponse
+	allResponse []AppRelaysResponse
 	responseErr error
 }
 
@@ -296,7 +295,7 @@ func (f *fakeRelayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRes
 	return f.response, f.responseErr
 }
 
-func (f *fakeRelayMeter) AllAppsRelays(from, to time.Time) (map[string]AppRelaysResponse, error) {
+func (f *fakeRelayMeter) AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
 

@@ -22,7 +22,7 @@ const (
 type RelayMeter interface {
 	// AppRelays returns total number of relays for the app over the specified time period
 	AppRelays(app string, from, to time.Time) (AppRelaysResponse, error)
-	AllAppsRelays(from, to time.Time) (map[string]AppRelaysResponse, error)
+	AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, error)
 	// TODO: relays(user, timePeriod): returns total number of relays for all apps of the user over the specified time period (granularity roughly 1 day as a starting point)
 	UserRelays(user string, from, to time.Time) (UserRelaysResponse, error)
 	TotalRelays(from, to time.Time) (TotalRelaysResponse, error)
@@ -208,7 +208,7 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 	return resp, nil
 }
 
-func (r *relayMeter) AllAppsRelays(from, to time.Time) (map[string]AppRelaysResponse, error) {
+func (r *relayMeter) AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, error) {
 	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received AllAppRelays request")
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -225,11 +225,11 @@ func (r *relayMeter) AllAppsRelays(from, to time.Time) (map[string]AppRelaysResp
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	resp := make(map[string]AppRelaysResponse)
+	rawResp := make(map[string]AppRelaysResponse)
 
 	for day, counts := range r.dailyUsage {
 		for pubKey, relCounts := range counts {
-			total := resp[pubKey].Count
+			total := rawResp[pubKey].Count
 
 			// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
 			if (day.After(from) || day.Equal(from)) && day.Before(to) {
@@ -237,7 +237,7 @@ func (r *relayMeter) AllAppsRelays(from, to time.Time) (map[string]AppRelaysResp
 				total.Failure += relCounts.Failure
 			}
 
-			resp[pubKey] = AppRelaysResponse{
+			rawResp[pubKey] = AppRelaysResponse{
 				Application: pubKey,
 				From:        from,
 				To:          to,
@@ -249,18 +249,24 @@ func (r *relayMeter) AllAppsRelays(from, to time.Time) (map[string]AppRelaysResp
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
 		for pubKey, relCounts := range r.todaysUsage {
-			total := resp[pubKey].Count
+			total := rawResp[pubKey].Count
 
 			total.Success += relCounts.Success
 			total.Failure += relCounts.Failure
 
-			resp[pubKey] = AppRelaysResponse{
+			rawResp[pubKey] = AppRelaysResponse{
 				Application: pubKey,
 				From:        from,
 				To:          to,
 				Count:       total,
 			}
 		}
+	}
+
+	resp := []AppRelaysResponse{}
+
+	for _, relResp := range rawResp {
+		resp = append(resp, relResp)
 	}
 
 	return resp, nil

@@ -688,7 +688,7 @@ func TestAllAppsRelays(t *testing.T) {
 			from:        now.AddDate(0, 0, -1),
 			to:          now.AddDate(0, 0, -2),
 			expectedErr: fmt.Errorf("Invalid timespan"),
-			expected:    nil,
+			expected:    map[string]AppRelaysResponse{},
 		},
 	}
 
@@ -703,7 +703,7 @@ func TestAllAppsRelays(t *testing.T) {
 
 			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			got, err := relayMeter.AllAppsRelays(tc.from, tc.to)
+			rawGot, err := relayMeter.AllAppsRelays(tc.from, tc.to)
 			if err != nil {
 				if tc.expectedErr == nil {
 					t.Fatalf("Unexpected error: %v", err)
@@ -711,6 +711,13 @@ func TestAllAppsRelays(t *testing.T) {
 				if !strings.Contains(err.Error(), tc.expectedErr.Error()) {
 					t.Fatalf("Expected error to contain: %q, got: %v", tc.expectedErr.Error(), err)
 				}
+			}
+
+			// Need to convert it to map to be able to compare
+			got := make(map[string]AppRelaysResponse, len(rawGot))
+
+			for _, relResp := range rawGot {
+				got[relResp.Application] = relResp
 			}
 
 			if diff := cmp.Diff(tc.expected, got); diff != "" {
