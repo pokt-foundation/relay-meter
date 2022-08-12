@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	logger "github.com/sirupsen/logrus"
 )
 
@@ -25,6 +26,30 @@ func TestGetHttpServer(t *testing.T) {
 		{
 			name: "App relays path is handled correctly",
 			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/apps/app?from=%s&to=%s",
+				url.QueryEscape(now.Format(time.RFC3339)),
+				url.QueryEscape(now.Format(time.RFC3339)),
+			),
+			expectedStatusCode: http.StatusOK,
+		},
+		{
+			name: "User relays path is handled correctly",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/users/user?from=%s&to=%s",
+				url.QueryEscape(now.Format(time.RFC3339)),
+				url.QueryEscape(now.Format(time.RFC3339)),
+			),
+			expectedStatusCode: http.StatusOK,
+		},
+		{
+			name: "All apps relays path is handled correctly",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/apps?from=%s&to=%s",
+				url.QueryEscape(now.Format(time.RFC3339)),
+				url.QueryEscape(now.Format(time.RFC3339)),
+			),
+			expectedStatusCode: http.StatusOK,
+		},
+		{
+			name: "Total relays path is handled correctly",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -163,12 +188,103 @@ func TestHandleAppRelays(t *testing.T) {
 	}
 }
 
+func TestHandleAllAppsRelays(t *testing.T) {
+	now, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+
+	testCases := []struct {
+		name               string
+		meterResponse      map[string]AppRelaysResponse
+		meterErr           error
+		expectedStatusCode int
+	}{
+		{
+			name: "Correct number of relays is returned",
+			meterResponse: map[string]AppRelaysResponse{
+				"app1": {
+					Application: "app1",
+					From:        now.AddDate(0, 0, -30),
+					To:          now.AddDate(0, 0, 1),
+					Count: RelayCounts{
+						Success: 62,
+						Failure: 58,
+					},
+				},
+			},
+			expectedStatusCode: http.StatusOK,
+		},
+		{
+			name:               "Error from the meter returns an internal error response",
+			meterErr:           fmt.Errorf("Internal meter error"),
+			expectedStatusCode: http.StatusInternalServerError,
+		},
+		{
+			name:               "Application not found returns a not found response",
+			meterErr:           AppNotFound,
+			expectedStatusCode: http.StatusBadRequest,
+		},
+		{
+			name:               "Bad request returns reqest error response",
+			meterErr:           InvalidRequest,
+			expectedStatusCode: http.StatusBadRequest,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeMeter := fakeRelayMeter{
+				allResponse: tc.meterResponse,
+				responseErr: tc.meterErr,
+			}
+
+			url := fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/apps?from=%s&to=%s",
+				url.QueryEscape(now.Format(time.RFC3339)),
+				url.QueryEscape(now.Format(time.RFC3339)),
+			)
+			req := httptest.NewRequest("GET", url, nil)
+			w := httptest.NewRecorder()
+
+			handleAllAppsRelays(&fakeMeter, logger.New(), w, req)
+
+			if !fakeMeter.requestedFrom.Equal(now) {
+				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
+			}
+
+			resp := w.Result()
+			body, _ := io.ReadAll(resp.Body)
+
+			if resp.StatusCode != tc.expectedStatusCode {
+				t.Errorf("Expected status code: %d, got: %d", tc.expectedStatusCode, resp.StatusCode)
+			}
+
+			// TODO: Should we return json even if there is a request/internal server error?
+			if tc.expectedStatusCode != http.StatusOK {
+				return
+			}
+
+			if resp.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("Expected Content-Type: %s, got: %s", "application/json", resp.Header.Get("Content-Type"))
+			}
+
+			var r map[string]AppRelaysResponse
+			fmt.Println(string(body))
+			if err := json.Unmarshal(body, &r); err != nil {
+				t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.meterResponse, r); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 type fakeRelayMeter struct {
 	requestedFrom time.Time
 	requestedTo   time.Time
 	requestedApp  string
 
 	response    AppRelaysResponse
+	allResponse map[string]AppRelaysResponse
 	responseErr error
 }
 
@@ -178,6 +294,13 @@ func (f *fakeRelayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRes
 	f.requestedApp = app
 
 	return f.response, f.responseErr
+}
+
+func (f *fakeRelayMeter) AllAppsRelays(from, to time.Time) (map[string]AppRelaysResponse, error) {
+	f.requestedFrom = from
+	f.requestedTo = to
+
+	return f.allResponse, f.responseErr
 }
 
 func (f *fakeRelayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResponse, error) {

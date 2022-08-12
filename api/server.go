@@ -19,9 +19,10 @@ const (
 
 var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
-	appsRelaysPath  = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
-	usersRelaysPath = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
-	totalRelaysPath = regexp.MustCompile(`^/v0/relays`)
+	appsRelaysPath    = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
+	allAppsRelaysPath = regexp.MustCompile(`^/v0/relays/apps`)
+	usersRelaysPath   = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
+	totalRelaysPath   = regexp.MustCompile(`^/v0/relays`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -39,6 +40,13 @@ type ErrorResponse struct {
 func handleAppRelays(meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.AppRelays(app, from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleAllAppsRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.AllAppsRelays(from, to)
 	}
 	handleEndpoint(l, meterEndpoint, w, req)
 }
@@ -156,6 +164,11 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 		if userID := match(usersRelaysPath, req.URL.Path); userID != "" {
 			handleUserRelays(meter, l, userID, w, req)
+			return
+		}
+
+		if allAppsRelaysPath.Match([]byte(req.URL.Path)) {
+			handleAllAppsRelays(meter, l, w, req)
 			return
 		}
 
