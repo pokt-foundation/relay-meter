@@ -19,9 +19,11 @@ const (
 
 var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
-	appsRelaysPath  = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
-	usersRelaysPath = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
-	totalRelaysPath = regexp.MustCompile(`^/v0/relays`)
+	appsRelaysPath    = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
+	allAppsRelaysPath = regexp.MustCompile(`^/v0/relays/apps`)
+	usersRelaysPath   = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
+	lbRelaysPath      = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
+	totalRelaysPath   = regexp.MustCompile(`^/v0/relays`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -43,9 +45,23 @@ func handleAppRelays(meter RelayMeter, l *logger.Logger, app string, w http.Resp
 	handleEndpoint(l, meterEndpoint, w, req)
 }
 
+func handleAllAppsRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.AllAppsRelays(from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
 func handleUserRelays(meter RelayMeter, l *logger.Logger, user string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.UserRelays(user, from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleLoadBalancerRelays(meter RelayMeter, l *logger.Logger, endpoint string, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.LoadBalancerRelays(endpoint, from, to)
 	}
 	handleEndpoint(l, meterEndpoint, w, req)
 }
@@ -80,6 +96,9 @@ func handleEndpoint(l *logger.Logger, meterEndpoint func(from, to time.Time) (an
 		case meterErr != nil && errors.Is(meterErr, AppNotFound):
 			errLogger.Warn("Invalid request: application not found")
 			http.Error(w, fmt.Sprintf("Bad request: %v", meterErr), http.StatusBadRequest)
+		case meterErr != nil && errors.Is(meterErr, ErrLoadBalancerNotFound):
+			errLogger.Warn("Invalid request: load balancer not found")
+			http.Error(w, fmt.Sprintf("Bad request: %v", meterErr), http.StatusNotFound)
 		default:
 			errLogger.Warn("Internal server error")
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -156,6 +175,16 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 		if userID := match(usersRelaysPath, req.URL.Path); userID != "" {
 			handleUserRelays(meter, l, userID, w, req)
+			return
+		}
+
+		if lbID := match(lbRelaysPath, req.URL.Path); lbID != "" {
+			handleLoadBalancerRelays(meter, l, lbID, w, req)
+			return
+		}
+
+		if allAppsRelaysPath.Match([]byte(req.URL.Path)) {
+			handleAllAppsRelays(meter, l, w, req)
 			return
 		}
 

@@ -128,6 +128,32 @@ func (b *backendProvider) UserApps(user string) ([]string, error) {
 	return applications, nil
 }
 
+func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalancer, error) {
+	// TODO: make the timeout configurable
+	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.backendApiUrl, endpoint), nil)
+	req.Header.Add("Authorization", b.backendApiToken)
+
+	client := http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Error from backend apiserver: %d, %s", resp.StatusCode, string(body))
+	}
+
+	var lb repository.LoadBalancer
+	if err := json.Unmarshal(body, &lb); err != nil {
+		return nil, err
+	}
+	return &lb, nil
+}
+
 // TODO: need a /health endpoint
 func main() {
 	log := logger.New()
