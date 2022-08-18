@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	logger "github.com/sirupsen/logrus"
+
+	"github.com/pokt-foundation/portal-api-go/repository"
 )
 
 func TestUserRelays(t *testing.T) {
@@ -727,6 +730,121 @@ func TestAllAppsRelays(t *testing.T) {
 	}
 }
 
+func TestLoadBalancerRelays(t *testing.T) {
+	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
+	usageData := fakeDailyMetrics()
+	todaysUsage := fakeTodaysMetrics()
+	errBackendFailure := errors.New("backend error")
+
+	testCases := []struct {
+		name         string
+		loadbalancer string
+		from         time.Time
+		to           time.Time
+		backendErr   error
+
+		expected    LoadBalancerRelaysResponse
+		expectedErr error
+	}{
+		{
+			name:        "LoadBalancer not found error",
+			expectedErr: ErrLoadBalancerNotFound,
+		},
+		{
+			name:        "Backend service error",
+			backendErr:  errBackendFailure,
+			expectedErr: errBackendFailure,
+		},
+		{
+			name:         "Correct summary for a loadbalancer",
+			loadbalancer: "lb1",
+			from:         now.AddDate(0, 0, -6),
+			to:           now,
+			expected: LoadBalancerRelaysResponse{
+				From:         now.AddDate(0, 0, -6),
+				To:           now.AddDate(0, 0, 1),
+				Endpoint:     "lb1",
+				Applications: []string{"app1", "app2", "app3"},
+				Count: RelayCounts{
+					Success: 6*(2+1) + 50 + 30,
+					Failure: 6*(3+5) + 40 + 70,
+				},
+			},
+		},
+		{
+			name:         "Correct summary for a loadbalancer excluding today",
+			loadbalancer: "lb1",
+			from:         now.AddDate(0, 0, -6),
+			to:           now.AddDate(0, 0, -2),
+			expected: LoadBalancerRelaysResponse{
+				From:         now.AddDate(0, 0, -6),
+				To:           now.AddDate(0, 0, -1),
+				Endpoint:     "lb1",
+				Applications: []string{"app1", "app2", "app3"},
+				Count: RelayCounts{
+					Success: 5 * (2 + 1),
+					Failure: 5 * (3 + 5),
+				},
+			},
+		},
+		{
+			name:         "Correct summary for a loadbalancer on todays metrics",
+			loadbalancer: "lb1",
+			from:         now,
+			to:           now,
+			expected: LoadBalancerRelaysResponse{
+				From:         now,
+				To:           now.AddDate(0, 0, 1),
+				Endpoint:     "lb1",
+				Applications: []string{"app1", "app2", "app3"},
+				Count: RelayCounts{
+					Success: 50 + 30,
+					Failure: 40 + 70,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fakeBackend := fakeBackend{
+				usage:       usageData,
+				todaysUsage: todaysUsage,
+				loadbalancers: map[string]*repository.LoadBalancer{
+					"lb1": {
+						Applications: []*repository.Application{
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app1"}},
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app2"}},
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app3"}},
+						},
+					},
+					"lb2": {
+						Applications: []*repository.Application{
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app4"}},
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app5"}},
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app6"}},
+						},
+					},
+				},
+				err: tc.backendErr,
+			}
+
+			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			time.Sleep(200 * time.Millisecond)
+			got, err := relayMeter.LoadBalancerRelays(tc.loadbalancer, tc.from, tc.to)
+			if err != nil && !errors.Is(err, tc.expectedErr) {
+				t.Fatalf("Expected error: %v, got: %v", tc.expectedErr, err)
+			}
+
+			if diff := cmp.Diff(tc.expected, got); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestStartDataLoader(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
 
@@ -787,6 +905,8 @@ type fakeBackend struct {
 	dailyMetricsCalls  int
 	dailyMetricsFrom   time.Time
 	dailyMetricsTo     time.Time
+
+	loadbalancers map[string]*repository.LoadBalancer
 }
 
 func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error) {
@@ -803,6 +923,10 @@ func (f *fakeBackend) TodaysUsage() (map[string]RelayCounts, error) {
 
 func (f *fakeBackend) UserApps(user string) ([]string, error) {
 	return f.userApps[user], nil
+}
+
+func (f *fakeBackend) LoadBalancer(endpoint string) (*repository.LoadBalancer, error) {
+	return f.loadbalancers[endpoint], f.err
 }
 
 func fakeDailyMetrics() map[time.Time]map[string]RelayCounts {

@@ -22,6 +22,7 @@ var (
 	appsRelaysPath    = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
 	allAppsRelaysPath = regexp.MustCompile(`^/v0/relays/apps`)
 	usersRelaysPath   = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
+	lbRelaysPath      = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
 	totalRelaysPath   = regexp.MustCompile(`^/v0/relays`)
 )
 
@@ -58,6 +59,13 @@ func handleUserRelays(meter RelayMeter, l *logger.Logger, user string, w http.Re
 	handleEndpoint(l, meterEndpoint, w, req)
 }
 
+func handleLoadBalancerRelays(meter RelayMeter, l *logger.Logger, endpoint string, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.LoadBalancerRelays(endpoint, from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
 func handleTotalRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.TotalRelays(from, to)
@@ -88,6 +96,9 @@ func handleEndpoint(l *logger.Logger, meterEndpoint func(from, to time.Time) (an
 		case meterErr != nil && errors.Is(meterErr, AppNotFound):
 			errLogger.Warn("Invalid request: application not found")
 			http.Error(w, fmt.Sprintf("Bad request: %v", meterErr), http.StatusBadRequest)
+		case meterErr != nil && errors.Is(meterErr, ErrLoadBalancerNotFound):
+			errLogger.Warn("Invalid request: load balancer not found")
+			http.Error(w, fmt.Sprintf("Bad request: %v", meterErr), http.StatusNotFound)
 		default:
 			errLogger.Warn("Internal server error")
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -164,6 +175,11 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 		if userID := match(usersRelaysPath, req.URL.Path); userID != "" {
 			handleUserRelays(meter, l, userID, w, req)
+			return
+		}
+
+		if lbID := match(lbRelaysPath, req.URL.Path); lbID != "" {
+			handleLoadBalancerRelays(meter, l, lbID, w, req)
 			return
 		}
 

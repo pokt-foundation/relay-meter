@@ -2,11 +2,14 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	logger "github.com/sirupsen/logrus"
+
+	"github.com/pokt-foundation/portal-api-go/repository"
 )
 
 const (
@@ -19,13 +22,18 @@ const (
 	MAX_PAST_DAYS_METRICS_DEFAULT_DAYS = 30
 )
 
+var (
+	ErrLoadBalancerNotFound = errors.New("loadbalancer/endpoint not found")
+)
+
 type RelayMeter interface {
 	// AppRelays returns total number of relays for the app over the specified time period
 	AppRelays(app string, from, to time.Time) (AppRelaysResponse, error)
 	AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, error)
-	// TODO: relays(user, timePeriod): returns total number of relays for all apps of the user over the specified time period (granularity roughly 1 day as a starting point)
 	UserRelays(user string, from, to time.Time) (UserRelaysResponse, error)
 	TotalRelays(from, to time.Time) (TotalRelaysResponse, error)
+	// LoadBalancerRelays returns the metrics for an Endpoint, AKA loadbalancer
+	LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
 }
 
 type RelayCounts struct {
@@ -55,6 +63,14 @@ type TotalRelaysResponse struct {
 	To    time.Time
 }
 
+type LoadBalancerRelaysResponse struct {
+	Count        RelayCounts
+	From         time.Time
+	To           time.Time
+	Endpoint     string
+	Applications []string
+}
+
 type RelayMeterOptions struct {
 	LoadInterval     time.Duration
 	DailyMetricsTTL  time.Duration
@@ -68,6 +84,8 @@ type Backend interface {
 	TodaysUsage() (map[string]RelayCounts, error)
 	// Is expected to return the list of applicationIDs owned by the user
 	UserApps(user string) ([]string, error)
+	// LoadBalancer returns the full load balancer struct
+	LoadBalancer(endpoint string) (*repository.LoadBalancer, error)
 }
 
 func NewRelayMeter(backend Backend, logger *logger.Logger, options RelayMeterOptions) RelayMeter {
@@ -375,6 +393,73 @@ func (r *relayMeter) TotalRelays(from, to time.Time) (TotalRelaysResponse, error
 	return resp, nil
 }
 
+// LoadBalancerRelays returns the metrics for all applications of a load balancer (AKA endpoint)
+func (r *relayMeter) LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error) {
+	r.Logger.WithFields(logger.Fields{"endpoint": endpoint, "from": from, "to": to}).Info("apiserver: Received LoadBalancerRelays request")
+	resp := LoadBalancerRelaysResponse{
+		From:     from,
+		To:       to,
+		Endpoint: endpoint,
+	}
+
+	// TODO: enforce MaxArchiveAge on From parameter
+	// TODO: enforce Today as maximum value for To parameter
+	from, to, err := AdjustTimePeriod(from, to)
+	if err != nil {
+		return resp, err
+	}
+
+	// Get today's date in day-only format
+	now := time.Now()
+	_, today, _ := AdjustTimePeriod(now, now)
+
+	lb, err := r.Backend.LoadBalancer(endpoint)
+	if err != nil {
+		r.Logger.WithFields(logger.Fields{"endpoint": endpoint, "from": from, "to": to, "error": err}).Warn("Error getting endpoint/loadbalancer applications processing LoadBalancerRelays request")
+		return resp, err
+	}
+	if lb == nil {
+		return resp, ErrLoadBalancerNotFound
+	}
+
+	var apps []string
+	for _, app := range lb.Applications {
+		key := applicationPublicKey(app)
+		if key != "" {
+			apps = append(apps, key)
+		}
+	}
+
+	r.rwMutex.RLock()
+	defer r.rwMutex.RUnlock()
+
+	var total RelayCounts
+	for day, counts := range r.dailyUsage {
+		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
+		if (day.After(from) || day.Equal(from)) && day.Before(to) {
+			for _, app := range apps {
+				total.Success += counts[app].Success
+				total.Failure += counts[app].Failure
+			}
+		}
+	}
+
+	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
+	if today.Equal(to) || today.Before(to) {
+		for _, app := range apps {
+			total.Success += r.todaysUsage[app].Success
+			total.Failure += r.todaysUsage[app].Failure
+		}
+	}
+
+	resp.Count = total
+	resp.From = from
+	resp.To = to
+	resp.Applications = apps
+
+	return resp, nil
+}
+
 // Starts a data loader in a go routine, to periodically load data from the backend
 // 	context allows stopping the data loader
 func (r *relayMeter) StartDataLoader(ctx context.Context) {
@@ -462,4 +547,24 @@ func maxArchiveAge(maxPastDays time.Duration) time.Duration {
 		return -24 * time.Hour * time.Duration(MAX_PAST_DAYS_METRICS_DEFAULT_DAYS)
 	}
 	return time.Duration(-1) * maxPastDays
+}
+
+func applicationPublicKey(app *repository.Application) string {
+	// TODO: Verify the order of the lookup in different structs
+	if app == nil {
+		return ""
+	}
+	appKey := app.FreeTierAAT.ApplicationPublicKey
+	if appKey != "" {
+		return appKey
+	}
+	appKey = app.GatewayAAT.ApplicationPublicKey
+	if appKey != "" {
+		return appKey
+	}
+	appKey = app.FreeTierApplicationAccount.PublicKey
+	if appKey != "" {
+		return appKey
+	}
+	return ""
 }
