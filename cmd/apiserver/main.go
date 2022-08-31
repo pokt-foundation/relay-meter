@@ -115,14 +115,8 @@ func (b *backendProvider) UserApps(user string) ([]string, error) {
 
 	var applications []string
 	for _, app := range userApps {
-		if app.FreeTier {
-			if app.FreeTierAAT.ApplicationPublicKey != "" {
-				applications = append(applications, app.FreeTierAAT.ApplicationPublicKey)
-			}
-		} else {
-			if app.GatewayAAT.ApplicationPublicKey != "" {
-				applications = append(applications, app.GatewayAAT.ApplicationPublicKey)
-			}
+		if app.GatewayAAT.ApplicationPublicKey != "" {
+			applications = append(applications, app.GatewayAAT.ApplicationPublicKey)
 		}
 	}
 	return applications, nil
