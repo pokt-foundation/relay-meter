@@ -554,11 +554,7 @@ func applicationPublicKey(app *repository.Application) string {
 	if app == nil {
 		return ""
 	}
-	appKey := app.FreeTierAAT.ApplicationPublicKey
-	if appKey != "" {
-		return appKey
-	}
-	appKey = app.GatewayAAT.ApplicationPublicKey
+	appKey := app.GatewayAAT.ApplicationPublicKey
 	if appKey != "" {
 		return appKey
 	}
