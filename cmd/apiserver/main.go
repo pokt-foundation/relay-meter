@@ -92,7 +92,10 @@ type backendProvider struct {
 func (b *backendProvider) UserApps(user string) ([]string, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/user/%s/application", b.backendApiUrl, user), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/user/%s/application", b.backendApiUrl, user), nil)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Add("Authorization", b.backendApiToken)
 
 	client := http.Client{}
@@ -125,7 +128,10 @@ func (b *backendProvider) UserApps(user string) ([]string, error) {
 func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.backendApiUrl, endpoint), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.backendApiUrl, endpoint), nil)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Add("Authorization", b.backendApiToken)
 
 	client := http.Client{}
@@ -151,7 +157,10 @@ func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalance
 func (b *backendProvider) LoadBalancers() ([]*repository.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer", b.backendApiUrl), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer", b.backendApiUrl), nil)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Add("Authorization", b.backendApiToken)
 
 	client := http.Client{}
