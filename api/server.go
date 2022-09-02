@@ -23,6 +23,7 @@ var (
 	allAppsRelaysPath = regexp.MustCompile(`^/v0/relays/apps`)
 	usersRelaysPath   = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
 	lbRelaysPath      = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
+	allLbsRelaysPath  = regexp.MustCompile(`^/v0/relays/endpoints`)
 	totalRelaysPath   = regexp.MustCompile(`^/v0/relays`)
 )
 
@@ -62,6 +63,13 @@ func handleUserRelays(meter RelayMeter, l *logger.Logger, user string, w http.Re
 func handleLoadBalancerRelays(meter RelayMeter, l *logger.Logger, endpoint string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.LoadBalancerRelays(endpoint, from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleAllLoadBalancersRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.AllLoadBalancersRelays(from, to)
 	}
 	handleEndpoint(l, meterEndpoint, w, req)
 }
@@ -185,6 +193,11 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 		if allAppsRelaysPath.Match([]byte(req.URL.Path)) {
 			handleAllAppsRelays(meter, l, w, req)
+			return
+		}
+
+		if allLbsRelaysPath.Match([]byte(req.URL.Path)) {
+			handleAllLoadBalancersRelays(meter, l, w, req)
 			return
 		}
 

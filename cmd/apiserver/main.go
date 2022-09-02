@@ -92,7 +92,7 @@ type backendProvider struct {
 func (b *backendProvider) UserApps(user string) ([]string, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/user/%s/application", b.backendApiUrl, user), nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/user/%s/application", b.backendApiUrl, user), nil)
 	req.Header.Add("Authorization", b.backendApiToken)
 
 	client := http.Client{}
@@ -125,7 +125,7 @@ func (b *backendProvider) UserApps(user string) ([]string, error) {
 func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.backendApiUrl, endpoint), nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.backendApiUrl, endpoint), nil)
 	req.Header.Add("Authorization", b.backendApiToken)
 
 	client := http.Client{}
@@ -146,6 +146,32 @@ func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalance
 		return nil, err
 	}
 	return &lb, nil
+}
+
+func (b *backendProvider) LoadBalancers() ([]*repository.LoadBalancer, error) {
+	// TODO: make the timeout configurable
+	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer", b.backendApiUrl), nil)
+	req.Header.Add("Authorization", b.backendApiToken)
+
+	client := http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Error from backend apiserver: %d, %s", resp.StatusCode, string(body))
+	}
+
+	var lbs []*repository.LoadBalancer
+	if err := json.Unmarshal(body, &lbs); err != nil {
+		return nil, err
+	}
+	return lbs, nil
 }
 
 // TODO: need a /health endpoint
