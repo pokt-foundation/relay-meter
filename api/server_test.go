@@ -56,6 +56,14 @@ func TestGetHttpServer(t *testing.T) {
 			expectedStatusCode: http.StatusOK,
 		},
 		{
+			name: "All load balancers relays path is handled correctly",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/endpoints?from=%s&to=%s",
+				url.QueryEscape(now.Format(time.RFC3339)),
+				url.QueryEscape(now.Format(time.RFC3339)),
+			),
+			expectedStatusCode: http.StatusOK,
+		},
+		{
 			name:               "Invalid request path returns an error",
 			url:                "http://relay-meter.pokt.network/invalid-path",
 			expectedStatusCode: http.StatusBadRequest,
@@ -373,6 +381,108 @@ func TestHandleLoadBalancerRelays(t *testing.T) {
 	}
 }
 
+func TestHandleAllLoadBalancersRelays(t *testing.T) {
+	now, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+
+	testCases := []struct {
+		name               string
+		meterResponse      []LoadBalancerRelaysResponse
+		meterErr           error
+		expectedStatusCode int
+	}{
+		{
+			name: "Correct number of relays is returned",
+			meterResponse: []LoadBalancerRelaysResponse{
+				{
+					Count:        RelayCounts{Success: 5, Failure: 3},
+					From:         now,
+					To:           now,
+					Endpoint:     "lb1",
+					Applications: []string{"app1", "app2"},
+				},
+			},
+			expectedStatusCode: http.StatusOK,
+		},
+		{
+			name: "Error from the meter returns an internal error response",
+			meterResponse: []LoadBalancerRelaysResponse{
+				{
+					Count:    RelayCounts{},
+					From:     now,
+					To:       now,
+					Endpoint: "internal meter error",
+				},
+			},
+			meterErr:           fmt.Errorf("Internal meter error"),
+			expectedStatusCode: http.StatusInternalServerError,
+		},
+		{
+			name: "LoadBalancer not found returns a not found response",
+			meterResponse: []LoadBalancerRelaysResponse{
+				{
+					Count:    RelayCounts{},
+					From:     now,
+					To:       now,
+					Endpoint: "non-existent-load-balancer",
+				},
+			},
+			meterErr:           ErrLoadBalancerNotFound,
+			expectedStatusCode: http.StatusNotFound,
+		},
+		{
+			name:               "Bad request returns reqest error response",
+			meterErr:           InvalidRequest,
+			expectedStatusCode: http.StatusBadRequest,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeMeter := fakeRelayMeter{
+				allLoadBalancersResponse: tc.meterResponse,
+				responseErr:              tc.meterErr,
+			}
+
+			url := fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/endpoints/lb1?from=%s&to=%s",
+				url.QueryEscape(now.Format(time.RFC3339)),
+				url.QueryEscape(now.Format(time.RFC3339)),
+			)
+			req := httptest.NewRequest("GET", url, nil)
+			w := httptest.NewRecorder()
+
+			handleAllLoadBalancersRelays(&fakeMeter, logger.New(), w, req)
+
+			if !fakeMeter.requestedFrom.Equal(now) {
+				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
+			}
+
+			resp := w.Result()
+			body, _ := io.ReadAll(resp.Body)
+
+			if resp.StatusCode != tc.expectedStatusCode {
+				t.Errorf("Expected status code: %d, got: %d", tc.expectedStatusCode, resp.StatusCode)
+			}
+
+			// TODO: Should we return json even if there is a request/internal server error?
+			if tc.expectedStatusCode != http.StatusOK {
+				return
+			}
+
+			if resp.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("Expected Content-Type: %s, got: %s", "application/json", resp.Header.Get("Content-Type"))
+			}
+
+			var r []LoadBalancerRelaysResponse
+			if err := json.Unmarshal(body, &r); err != nil {
+				t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
+			}
+			if diff := cmp.Diff(tc.meterResponse, r); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 type fakeRelayMeter struct {
 	requestedFrom time.Time
 	requestedTo   time.Time
@@ -381,6 +491,7 @@ type fakeRelayMeter struct {
 	response                   AppRelaysResponse
 	allResponse                []AppRelaysResponse
 	loadbalancerRelaysResponse LoadBalancerRelaysResponse
+	allLoadBalancersResponse   []LoadBalancerRelaysResponse
 	responseErr                error
 }
 
@@ -411,6 +522,12 @@ func (f *fakeRelayMeter) LoadBalancerRelays(endpoint string, from, to time.Time)
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.loadbalancerRelaysResponse, f.responseErr
+}
+
+func (f *fakeRelayMeter) AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error) {
+	f.requestedFrom = from
+	f.requestedTo = to
+	return f.allLoadBalancersResponse, f.responseErr
 }
 
 func TestTimePeriod(t *testing.T) {

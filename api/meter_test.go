@@ -845,6 +845,159 @@ func TestLoadBalancerRelays(t *testing.T) {
 	}
 }
 
+func TestAllLoadBalancersRelays(t *testing.T) {
+	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
+	usageData := fakeDailyMetrics()
+	todaysUsage := fakeTodaysMetrics()
+	errBackendFailure := errors.New("backend error")
+
+	testCases := []struct {
+		name       string
+		from       time.Time
+		to         time.Time
+		backendErr error
+
+		expected    map[string]LoadBalancerRelaysResponse
+		expectedErr error
+	}{
+		{
+			name:        "Backend service error",
+			backendErr:  errBackendFailure,
+			expectedErr: errBackendFailure,
+			expected:    map[string]LoadBalancerRelaysResponse{},
+		},
+		{
+			name: "Correct summary for loadbalancers",
+			from: now.AddDate(0, 0, -6),
+			to:   now,
+			expected: map[string]LoadBalancerRelaysResponse{
+				"lb1": {
+					From:         now.AddDate(0, 0, -6),
+					To:           now.AddDate(0, 0, 1),
+					Endpoint:     "lb1",
+					Applications: []string{"app1", "app2", "app3"},
+					Count: RelayCounts{
+						Success: 98,
+						Failure: 158,
+					},
+				},
+				"lb2": {
+					From:         now.AddDate(0, 0, -6),
+					To:           now.AddDate(0, 0, 1),
+					Endpoint:     "lb2",
+					Applications: []string{"app4", "app5", "app6"},
+					Count: RelayCounts{
+						Success: 530,
+						Failure: 742,
+					},
+				},
+			},
+		},
+		{
+			name: "Correct summary for loadbalancers excluding today",
+			from: now.AddDate(0, 0, -6),
+			to:   now.AddDate(0, 0, -2),
+			expected: map[string]LoadBalancerRelaysResponse{
+				"lb1": {
+					From:         now.AddDate(0, 0, -6),
+					To:           now.AddDate(0, 0, -1),
+					Endpoint:     "lb1",
+					Applications: []string{"app1", "app2", "app3"},
+					Count: RelayCounts{
+						Success: 15,
+						Failure: 40,
+					},
+				},
+				"lb2": {
+					From:         now.AddDate(0, 0, -6),
+					To:           now.AddDate(0, 0, -1),
+					Endpoint:     "lb2",
+					Applications: []string{"app4", "app5", "app6"},
+					Count: RelayCounts{
+						Success: 25,
+						Failure: 35,
+					},
+				},
+			},
+		},
+		{
+			name: "Correct summary for loadbalancers on todays metrics",
+			from: now,
+			to:   now,
+			expected: map[string]LoadBalancerRelaysResponse{
+				"lb1": {
+					From:         now,
+					To:           now.AddDate(0, 0, 1),
+					Endpoint:     "lb1",
+					Applications: []string{"app1", "app2", "app3"},
+					Count: RelayCounts{
+						Success: 80,
+						Failure: 110,
+					},
+				},
+				"lb2": {
+					From:         now,
+					To:           now.AddDate(0, 0, 1),
+					Endpoint:     "lb2",
+					Applications: []string{"app4", "app5", "app6"},
+					Count: RelayCounts{
+						Success: 500,
+						Failure: 700,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fakeBackend := fakeBackend{
+				usage:       usageData,
+				todaysUsage: todaysUsage,
+				loadbalancers: map[string]*repository.LoadBalancer{
+					"lb1": {
+						ID: "lb1",
+						Applications: []*repository.Application{
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app1"}},
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app2"}},
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app3"}},
+						},
+					},
+					"lb2": {
+						ID: "lb2",
+						Applications: []*repository.Application{
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app4"}},
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app5"}},
+							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app6"}},
+						},
+					},
+				},
+				err: tc.backendErr,
+			}
+
+			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			time.Sleep(200 * time.Millisecond)
+			rawGot, err := relayMeter.AllLoadBalancersRelays(tc.from, tc.to)
+			if err != nil && !errors.Is(err, tc.expectedErr) {
+				t.Fatalf("Expected error: %v, got: %v", tc.expectedErr, err)
+			}
+
+			// Need to convert it to map to be able to compare
+			got := make(map[string]LoadBalancerRelaysResponse, len(rawGot))
+
+			for _, relResp := range rawGot {
+				got[relResp.Endpoint] = relResp
+			}
+
+			if diff := cmp.Diff(tc.expected, got); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestStartDataLoader(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
 
@@ -927,6 +1080,16 @@ func (f *fakeBackend) UserApps(user string) ([]string, error) {
 
 func (f *fakeBackend) LoadBalancer(endpoint string) (*repository.LoadBalancer, error) {
 	return f.loadbalancers[endpoint], f.err
+}
+
+func (f *fakeBackend) LoadBalancers() ([]*repository.LoadBalancer, error) {
+	var lbs []*repository.LoadBalancer
+
+	for _, lb := range f.loadbalancers {
+		lbs = append(lbs, lb)
+	}
+
+	return lbs, f.err
 }
 
 func fakeDailyMetrics() map[time.Time]map[string]RelayCounts {

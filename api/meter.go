@@ -34,6 +34,7 @@ type RelayMeter interface {
 	TotalRelays(from, to time.Time) (TotalRelaysResponse, error)
 	// LoadBalancerRelays returns the metrics for an Endpoint, AKA loadbalancer
 	LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
+	AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error)
 }
 
 type RelayCounts struct {
@@ -86,6 +87,7 @@ type Backend interface {
 	UserApps(user string) ([]string, error)
 	// LoadBalancer returns the full load balancer struct
 	LoadBalancer(endpoint string) (*repository.LoadBalancer, error)
+	LoadBalancers() ([]*repository.LoadBalancer, error)
 }
 
 func NewRelayMeter(backend Backend, logger *logger.Logger, options RelayMeterOptions) RelayMeter {
@@ -456,6 +458,99 @@ func (r *relayMeter) LoadBalancerRelays(endpoint string, from, to time.Time) (Lo
 	resp.From = from
 	resp.To = to
 	resp.Applications = apps
+
+	return resp, nil
+}
+
+// AllLoadBalancersRelays returns the metrics for all applications of all load balancers (AKA endpoints)
+func (r *relayMeter) AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error) {
+	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received AllLoadBalancerRelays request")
+
+	// TODO: enforce MaxArchiveAge on From parameter
+	// TODO: enforce Today as maximum value for To parameter
+	from, to, err := AdjustTimePeriod(from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get today's date in day-only format
+	now := time.Now()
+	_, today, _ := AdjustTimePeriod(now, now)
+
+	lbs, err := r.Backend.LoadBalancers()
+	if err != nil {
+		r.Logger.WithFields(logger.Fields{"from": from, "to": to, "error": err}).Warn("Error getting endpoint/loadbalancers applications processing AllLoadBalancerRelays request")
+		return nil, err
+	}
+
+	r.rwMutex.RLock()
+	defer r.rwMutex.RUnlock()
+
+	rawResp := make(map[string]LoadBalancerRelaysResponse)
+
+	for day, counts := range r.dailyUsage {
+		for _, lb := range lbs {
+			total := rawResp[lb.ID].Count
+
+			var apps []string
+			for _, app := range lb.Applications {
+				key := applicationPublicKey(app)
+				if key != "" {
+					apps = append(apps, key)
+				}
+			}
+
+			// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
+			if (day.After(from) || day.Equal(from)) && day.Before(to) {
+				for _, app := range apps {
+					total.Success += counts[app].Success
+					total.Failure += counts[app].Failure
+				}
+			}
+
+			rawResp[lb.ID] = LoadBalancerRelaysResponse{
+				Endpoint:     lb.ID,
+				From:         from,
+				To:           to,
+				Count:        total,
+				Applications: apps,
+			}
+		}
+	}
+
+	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
+	if today.Equal(to) || today.Before(to) {
+		for _, lb := range lbs {
+			total := rawResp[lb.ID].Count
+
+			var apps []string
+			for _, app := range lb.Applications {
+				key := applicationPublicKey(app)
+				if key != "" {
+					apps = append(apps, key)
+				}
+			}
+
+			for _, app := range apps {
+				total.Success += r.todaysUsage[app].Success
+				total.Failure += r.todaysUsage[app].Failure
+			}
+
+			rawResp[lb.ID] = LoadBalancerRelaysResponse{
+				Endpoint:     lb.ID,
+				From:         from,
+				To:           to,
+				Count:        total,
+				Applications: apps,
+			}
+		}
+	}
+
+	resp := []LoadBalancerRelaysResponse{}
+
+	for _, relResp := range rawResp {
+		resp = append(resp, relResp)
+	}
 
 	return resp, nil
 }
