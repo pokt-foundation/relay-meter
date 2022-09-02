@@ -476,8 +476,8 @@ func TestHandleAllLoadBalancersRelays(t *testing.T) {
 			if err := json.Unmarshal(body, &r); err != nil {
 				t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
 			}
-			if r[0].Count != tc.meterResponse[0].Count {
-				t.Errorf("Expected Count: %d, got: %d", tc.meterResponse[0].Count, r[0].Count)
+			if diff := cmp.Diff(tc.meterResponse, r); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
 			}
 		})
 	}
