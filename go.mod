@@ -6,7 +6,7 @@ require (
 	github.com/google/go-cmp v0.5.8
 	github.com/influxdata/influxdb-client-go/v2 v2.9.1
 	github.com/lib/pq v1.10.6
-	github.com/pokt-foundation/portal-api-go v0.2.7
+	github.com/pokt-foundation/portal-api-go v0.3.3
 	github.com/sirupsen/logrus v1.9.0
 )
 
