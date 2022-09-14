@@ -6,7 +6,7 @@ require (
 	github.com/google/go-cmp v0.5.8
 	github.com/influxdata/influxdb-client-go/v2 v2.9.1
 	github.com/lib/pq v1.10.6
-	github.com/pokt-foundation/portal-api-go v0.2.7
+	github.com/pokt-foundation/portal-api-go v0.3.1
 	github.com/sirupsen/logrus v1.9.0
 )
 
@@ -16,6 +16,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/stretchr/testify v1.8.0 // indirect
 	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2 // indirect
-	golang.org/x/sys v0.0.0-20220823224334-20c2bfdbfe24 // indirect
+	golang.org/x/sys v0.0.0-20220909162455-aba9fc2a8ff2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
