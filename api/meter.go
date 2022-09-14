@@ -645,17 +645,14 @@ func maxArchiveAge(maxPastDays time.Duration) time.Duration {
 }
 
 func applicationPublicKey(app *repository.Application) string {
-	// TODO: Verify the order of the lookup in different structs
 	if app == nil {
 		return ""
 	}
+
 	appKey := app.GatewayAAT.ApplicationPublicKey
 	if appKey != "" {
 		return appKey
 	}
-	appKey = app.FreeTierApplicationAccount.PublicKey
-	if appKey != "" {
-		return appKey
-	}
+
 	return ""
 }
