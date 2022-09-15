@@ -31,7 +31,7 @@ func TestCollect(t *testing.T) {
 			maxArchiveAge:      30 * 24 * time.Hour,
 			shouldCollectDaily: true,
 			expectedFrom:       today.Add(-30 * 24 * time.Hour),
-			expectedTo:         today.AddDate(0, 0, 1),
+			expectedTo:         today,
 		},
 		{
 			name:               "Previous days with existing metrics are skipped",
@@ -40,7 +40,7 @@ func TestCollect(t *testing.T) {
 			lastSaved:          today.AddDate(0, 0, -10),
 			shouldCollectDaily: true,
 			expectedFrom:       today.AddDate(0, 0, -9),
-			expectedTo:         today.AddDate(0, 0, 1),
+			expectedTo:         today,
 		},
 		{
 			name:          "Daily metrics are skipped altogether if yesterday's data already collected",
