@@ -108,6 +108,8 @@ type relayMeter struct {
 
 	dailyUsage  map[time.Time]map[string]RelayCounts
 	todaysUsage map[string]RelayCounts
+	todaysDate  time.Time
+	noDataYet   bool
 
 	dailyTTL  time.Time
 	todaysTTL time.Time
@@ -131,9 +133,9 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	var dailyUsage map[time.Time]map[string]RelayCounts
 	var todaysUsage map[string]RelayCounts
 	var err error
-	noDataYet := r.isEmpty()
+	r.noDataYet = r.isEmpty()
 
-	if noDataYet || now.After(r.dailyTTL) {
+	if r.noDataYet || now.After(r.dailyTTL) {
 		updateDaily = true
 		// TODO: send backend requests concurrently
 		dailyUsage, err = r.Backend.DailyUsage(from, to)
@@ -144,7 +146,7 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 		r.Logger.WithFields(logger.Fields{"daily_metrics_count": len(dailyUsage)}).Info("Received daily metrics")
 	}
 
-	if noDataYet || now.After(r.todaysTTL) {
+	if r.noDataYet || now.After(r.todaysTTL) {
 		updateToday = true
 		todaysUsage, err = r.Backend.TodaysUsage()
 		if err != nil {
@@ -170,6 +172,8 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 		r.dailyTTL = time.Now().Add(d)
 	}
 	if updateToday {
+		r.sendYesterdayToDailyUsageIfNeeded()
+
 		r.todaysUsage = todaysUsage
 		d := r.RelayMeterOptions.TodaysMetricsTTL
 		if int(d.Seconds()) == 0 {
@@ -178,6 +182,23 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 		r.todaysTTL = time.Now().Add(d)
 	}
 	return nil
+}
+
+func (r *relayMeter) sendYesterdayToDailyUsageIfNeeded() {
+	// Get today's date in day-only format
+	now := time.Now()
+	_, today, _ := AdjustTimePeriod(now, now)
+
+	if r.noDataYet {
+		r.todaysDate = today
+
+		return
+	}
+
+	if today != r.todaysDate {
+		r.dailyUsage[r.todaysDate] = r.todaysUsage
+		r.todaysDate = today
+	}
 }
 
 // TODO: add a cache library, e.g. bigcache, if necessary (a cache library may not be needed, as we have a few thousand apps, for a maximum of 30 days)

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	logger "github.com/sirupsen/logrus"
-
 	"github.com/pokt-foundation/portal-api-go/repository"
+	logger "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUserRelays(t *testing.T) {
@@ -1113,4 +1113,36 @@ func fakeTodaysMetrics() map[string]RelayCounts {
 		"app2": {Success: 30, Failure: 70},
 		"app4": {Success: 500, Failure: 700},
 	}
+}
+
+func Test_relayMeter_sendYesterdayToDailyUsageIfNeeded(t *testing.T) {
+	c := require.New(t)
+
+	now := time.Now()
+	_, today, _ := AdjustTimePeriod(now, now)
+
+	rm := relayMeter{
+		noDataYet:   false,
+		todaysDate:  today,
+		dailyUsage:  fakeDailyMetrics(),
+		todaysUsage: fakeTodaysMetrics(),
+	}
+
+	rm.sendYesterdayToDailyUsageIfNeeded()
+	c.Len(rm.dailyUsage, 6)
+	c.Equal(today, rm.todaysDate)
+
+	yesterday := time.Date(2022, time.August, 20, 0, 0, 0, 0, time.UTC)
+
+	rm = relayMeter{
+		noDataYet:   false,
+		todaysDate:  yesterday,
+		dailyUsage:  fakeDailyMetrics(),
+		todaysUsage: fakeTodaysMetrics(),
+	}
+
+	rm.sendYesterdayToDailyUsageIfNeeded()
+	c.Equal(rm.dailyUsage[yesterday], fakeTodaysMetrics())
+	c.Len(rm.dailyUsage, 7)
+	c.Equal(today, rm.todaysDate)
 }
