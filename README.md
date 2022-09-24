@@ -1,6 +1,6 @@
 # Relay Meter
 
-The Relay Meter collects relay data from Influx DB, as well as serves it to toehr backend services via a REST API.
+The Relay Meter collects relay data from Influx DB, as well as serves it to other backend services via a REST API.
 
 ## Pre-Commit Installation
 
