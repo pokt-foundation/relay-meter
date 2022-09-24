@@ -57,17 +57,17 @@ jobs:
           container-name: relay-meter-collector-staging
           image: ${{ steps.build-image-collector.outputs.image }}
           environment-variables: |
+            INFLUXDB_URL=${{ secrets.STAGING_INFLUXDB_URL }}
+            POSTGRES_HOST=${{ secrets.STAGING_POSTGRES_HOST }}
+            POSTGRES_PASSWORD=${{ secrets.STAGING_POSTGRES_PASSWORD }}
             INFLUXDB_TOKEN=${{ secrets.INFLUXDB_TOKEN }}
-            INFLUXDB_URL=${{ secrets.INFLUXDB_URL }}
             INFLUXDB_ORG=${{ secrets.INFLUXDB_ORG }}
             INFLUXDB_BUCKET_DAILY=${{ secrets.INFLUXDB_BUCKET_DAILY }}
             INFLUXDB_BUCKET_CURRENT=${{ secrets.INFLUXDB_BUCKET_CURRENT }}
             COLLECTION_INTERVAL_SECONDS=${{ secrets.COLLECTION_INTERVAL_SECONDS }}
             ENV_REPORT_INTERVAL_SECONDS=${{ secrets.ENV_REPORT_INTERVAL_SECONDS }}
-            POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
             POSTGRES_PORT=5432
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             POSTGRES_DB=${{ secrets.POSTGRES_DB }}
 
       - name: Fill in the new image ID / us-west-2 - server
@@ -78,13 +78,13 @@ jobs:
           container-name: relay-meter-server-staging
           image: ${{ steps.build-image-api-server.outputs.image }}
           environment-variables: |
+            POSTGRES_HOST=${{ secrets.STAGING_POSTGRES_HOST }}
+            POSTGRES_PASSWORD=${{ secrets.STAGING_POSTGRES_PASSWORD }}
+            BACKEND_API_URL=${{ secrets.STAGING_BACKEND_API_URL }}
+            BACKEND_API_TOKEN=${{ secrets.STAGING_BACKEND_API_TOKEN }}
             API_SERVER_PORT=80
-            BACKEND_API_URL=${{ secrets.BACKEND_API_URL }}
-            BACKEND_API_TOKEN=${{ secrets.BACKEND_API_TOKEN }}
-            POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
             POSTGRES_PORT=5432
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             POSTGRES_DB=${{ secrets.POSTGRES_DB }}
 
       - name: Deploy / us-west-2
