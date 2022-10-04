@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"database/sql"
+
 	_ "github.com/lib/pq"
 
 	"github.com/adshmh/meter/api"
