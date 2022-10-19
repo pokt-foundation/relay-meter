@@ -82,13 +82,13 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 func (c *collector) collectTodaysUsage() error {
 	todaysCounts, err := c.Source.TodaysCounts()
 	if err != nil {
-		return err
+		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily counts")
 	}
 	c.Logger.WithFields(logger.Fields{"todays_usage_count": len(todaysCounts)}).Info("Collected todays usage")
 
 	todaysLatency, err := c.Source.TodaysLatency()
 	if err != nil {
-		return err
+		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily latencies")
 	}
 	c.Logger.WithFields(logger.Fields{"todays_latencies_count": len(todaysLatency)}).Info("Collected todays latencies")
 
@@ -97,7 +97,7 @@ func (c *collector) collectTodaysUsage() error {
 
 func (c *collector) collect() error {
 	if err := c.collectTodaysUsage(); err != nil {
-		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect todays metrics")
+		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to write todays metrics")
 		return err
 	}
 
