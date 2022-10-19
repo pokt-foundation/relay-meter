@@ -4,7 +4,6 @@ package db
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -35,10 +34,8 @@ type Reporter interface {
 type Writer interface {
 	// TODO: rollover of entries
 	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts) error
-	// WriteTodaysUsage writes todays relay counts to the underlying storage.
-	WriteTodaysUsage(counts map[string]api.RelayCounts) error
-	// WriteTodaysLatencies writes todays latencies to the underlying storage.
-	WriteTodaysLatencies(latencies map[string][]api.Latency) error
+	// WriteTodaysMetrics writes todays relay counts and latencies to the underlying storage.
+	WriteTodaysMetrics(counts map[string]api.RelayCounts, latencies map[string][]api.Latency) error
 	// Returns oldest and most recent timestamps for stored metrics
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
 }
@@ -185,9 +182,23 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	return first, last, err
 }
 
+func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
+	err := p.writeTodaysUsage(counts)
+	if err != nil {
+		return fmt.Errorf("error writing usage: %s", err.Error())
+	}
+
+	err = p.writeTodaysLatency(latencies)
+	if err != nil {
+		return fmt.Errorf("error writing latency: %s", err.Error())
+	}
+
+	return nil
+}
+
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
 //	All the entries in the table holding todays metrics are deleted first.
-func (p *pgClient) WriteTodaysUsage(counts map[string]api.RelayCounts) error {
+func (p *pgClient) writeTodaysUsage(counts map[string]api.RelayCounts) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -226,7 +237,7 @@ func (p *pgClient) WriteTodaysUsage(counts map[string]api.RelayCounts) error {
 
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
 //	All the entries in the table holding todays metrics are deleted first.
-func (p *pgClient) WriteTodaysLatencies(latencies map[string][]api.Latency) error {
+func (p *pgClient) writeTodaysLatency(latencies map[string][]api.Latency) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -244,23 +255,20 @@ func (p *pgClient) WriteTodaysLatencies(latencies map[string][]api.Latency) erro
 	}
 
 	// TODO: bulk insert
-	for app, latencies := range latencies {
+	for app, appLatency := range latencies {
+		for _, appLatency := range appLatency {
+			_, execErr := tx.ExecContext(ctx,
+				"INSERT INTO todays_app_latencies(application, time, latency) VALUES($1, $2, $3);",
+				app, appLatency.Time, appLatency.Latency)
 
-		latenciesString, err := json.Marshal(latencies)
-		if err != nil {
-			return fmt.Errorf("Error marshalling latencies to JSON")
-		}
-		_, execErr := tx.ExecContext(ctx,
-			"INSERT INTO todays_app_latencies(application, latencies) VALUES($1, $2);",
-			app, latenciesString)
-		if execErr != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
-				return execErr
+			if execErr != nil {
+				if rollbackErr := tx.Rollback(); rollbackErr != nil {
+					fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+					return execErr
+				}
+				fmt.Printf("update failed: %v", execErr)
 			}
-			fmt.Printf("update failed: %v", execErr)
 		}
-		fmt.Println("HEY HI HELLO", execErr)
 	}
 
 	if err := tx.Commit(); err != nil {

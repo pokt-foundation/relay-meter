@@ -173,7 +173,7 @@ func (f *fakeSource) TodaysCounts() (map[string]api.RelayCounts, error) {
 	return f.todaysCounts, nil
 }
 
-func (f *fakeSource) TodaysLatencies() (map[string][]api.Latency, error) {
+func (f *fakeSource) TodaysLatency() (map[string][]api.Latency, error) {
 	f.todaysLatencyCollected = true
 	return f.todaysLatency, nil
 }
@@ -195,12 +195,8 @@ func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCo
 	return nil
 }
 
-func (f *fakeWriter) WriteTodaysUsage(counts map[string]api.RelayCounts) error {
+func (f *fakeWriter) WriteTodaysMetrics(counts map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
 	f.todaysWrites++
-	return nil
-}
-
-func (f *fakeWriter) WriteTodaysLatencies(latencies map[string][]api.Latency) error {
 	f.todaysLatencyWrites++
 	return nil
 }

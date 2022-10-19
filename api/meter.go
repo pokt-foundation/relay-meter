@@ -604,7 +604,6 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 //	- From is adjusted to the start of the day that it originally specifies
 //	- To is adjusted to the start of the next day from the day it originally specifies
 func AdjustTimePeriod(from, to time.Time) (time.Time, time.Time, error) {
-
 	// TODO: refactor: there is some duplication in the function
 	getDefault := func(parameter time.Time, defaultValue time.Time) (time.Time, error) {
 		if parameter.Equal(time.Time{}) {

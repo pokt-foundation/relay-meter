@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -13,14 +14,12 @@ import (
 	"github.com/adshmh/meter/api"
 )
 
-const hourFormat = "2006-01-02 15:04:05"
-
 type Source interface {
 	AppRelays(from, to time.Time) (map[string]api.RelayCounts, error)
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	// Returns application metrics for today so far
 	TodaysCounts() (map[string]api.RelayCounts, error)
-	TodaysLatencies() (map[string][]api.Latency, error)
+	TodaysLatency() (map[string][]api.Latency, error)
 }
 
 type InfluxDBOptions struct {
@@ -58,14 +57,15 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api
 	// TODO: send queries in parallel
 	// TODO: use 'sum' in the influx query to reduce the number of returned data points
 	for current := from; current.Before(to); current = current.AddDate(0, 0, 1) {
-		query := fmt.Sprintf("from(bucket: %q)", i.Options.DailyBucket) +
-			fmt.Sprintf(" |> range(start: %s, stop: %s)", current.Format(time.RFC3339), current.AddDate(0, 0, 1).Format(time.RFC3339)) +
-			fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
-			fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
-			fmt.Sprintf(" |> group(columns: [%q, %q])", "applicationPublicKey", "result") +
-			fmt.Sprintf(" |> keep(columns: [%q, %q, %q])", "applicationPublicKey", "result", "_value")
+		queryString := `from(bucket: %q)
+		  |> range(start: %s, stop: %s)
+		  |> filter(fn: (r) => r["_measurement"] == "relay")
+		  |> filter(fn: (r) => r["_field"] == "count")
+		  |> group(columns: ["applicationPublicKey", "result"])
+		  |> keep(columns: ["applicationPublicKey", "result", "_value"])`
+		fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, current.Format(time.RFC3339), current.AddDate(0, 0, 1).Format(time.RFC3339))
 
-		result, err := queryAPI.Query(context.Background(), query)
+		result, err := queryAPI.Query(context.Background(), fluxQuery)
 		if err != nil {
 			return nil, err
 		}
@@ -121,15 +121,16 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 
 	counts := make(map[string]api.RelayCounts)
 	// TODO: send queries in parallel
-	query := fmt.Sprintf("from(bucket: %q)", i.Options.CurrentBucket) +
-		fmt.Sprintf(" |> range(start: %s)", startOfDay(time.Now()).Format(time.RFC3339)) +
-		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
-		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
-		fmt.Sprintf(" |> keep(columns: [%q, %q, %q])", "applicationPublicKey", "result", "_value") +
-		fmt.Sprintf(" |> group(columns: [%q, %q])", "applicationPublicKey", "result") +
-		fmt.Sprintf(" |> sum()")
+	queryString := `from(bucket: %q)
+	  |> range(start: %s)
+	  |> filter(fn: (r) => r["_measurement"] == "relay")
+	  |> filter(fn: (r) => r["_field"] == "count")
+	  |> keep(columns: ["applicationPublicKey", "result", "_value"])
+	  |> group(columns: ["applicationPublicKey", "result"])
+	  |> sum()`
+	fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, startOfDay(time.Now()).Format(time.RFC3339))
 
-	result, err := queryAPI.Query(context.Background(), query)
+	result, err := queryAPI.Query(context.Background(), fluxQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -175,21 +176,28 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	return counts, nil
 }
 
-func (i *influxDB) TodaysLatencies() (map[string][]api.Latency, error) {
+func roundFloat(val float64, precision uint) float64 {
+	ratio := math.Pow(10, float64(precision))
+	return math.Round(val*ratio) / ratio
+}
+
+func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI(i.Options.Org)
 
 	latencies := make(map[string][]api.Latency)
-	// TODO: send queries in parallel
-	query := fmt.Sprintf("from(bucket: %q)", i.Options.CurrentBucket) +
-		fmt.Sprintf(" |> range(start: %s)", startOfDay(time.Now()).Format(time.RFC3339)) +
-		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
-		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "elapsedTime") +
-		fmt.Sprintf(" |> group(columns: [%q, %q, %q, %q, %q])", "host", "applicationPublicKey", "region", "result", "method") +
-		fmt.Sprintf(" |> keep(columns: [%q, %q, %q])", "applicationPublicKey", "_time", "_value") +
-		" |> aggregateWindow(every: 1h, fn: mean)"
 
-	result, err := queryAPI.Query(context.Background(), query)
+	// TODO: send queries in parallel
+	queryString := `from(bucket: %q)
+	  |> range(start: %s)
+	  |> filter(fn: (r) => r["_measurement"] == "relay")
+	  |> filter(fn: (r) => r["_field"] == "elapsedTime")
+	  |> group(columns: ["host", "applicationPublicKey", "region", "result", "method"])
+	  |> keep(columns: ["applicationPublicKey", "_time", "_value"])
+	  |> aggregateWindow(every: 1h, fn: mean)`
+	fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, startOfDay(time.Now()).Format(time.RFC3339))
+
+	result, err := queryAPI.Query(context.Background(), fluxQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +229,7 @@ func (i *influxDB) TodaysLatencies() (map[string][]api.Latency, error) {
 				return nil, fmt.Errorf("Error parsing latency time: %v", result.Record().ValueByKey("_value"))
 			}
 
-			latencyByHour := api.Latency{Time: hourlyTime, Latency: hourlyAverageLatency}
+			latencyByHour := api.Latency{Time: hourlyTime, Latency: roundFloat(hourlyAverageLatency, 5)}
 
 			latencies[app] = append(latencies[app], latencyByHour)
 		}
