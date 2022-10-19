@@ -13,11 +13,14 @@ import (
 	"github.com/adshmh/meter/api"
 )
 
+const hourFormat = "2006-01-02 15:04:05"
+
 type Source interface {
 	AppRelays(from, to time.Time) (map[string]api.RelayCounts, error)
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	// Returns application metrics for today so far
 	TodaysCounts() (map[string]api.RelayCounts, error)
+	TodaysLatencies() (map[string][]api.Latency, error)
 }
 
 type InfluxDBOptions struct {
@@ -170,6 +173,68 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 
 	client.Close()
 	return counts, nil
+}
+
+func (i *influxDB) TodaysLatencies() (map[string][]api.Latency, error) {
+	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
+	queryAPI := client.QueryAPI(i.Options.Org)
+
+	latencies := make(map[string][]api.Latency)
+	// TODO: send queries in parallel
+	query := fmt.Sprintf("from(bucket: %q)", i.Options.CurrentBucket) +
+		fmt.Sprintf(" |> range(start: %s)", startOfDay(time.Now()).Format(time.RFC3339)) +
+		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "relay") +
+		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "elapsedTime") +
+		fmt.Sprintf(" |> group(columns: [%q, %q, %q, %q, %q])", "host", "applicationPublicKey", "region", "result", "method") +
+		fmt.Sprintf(" |> keep(columns: [%q, %q, %q])", "applicationPublicKey", "_time", "_value") +
+		" |> aggregateWindow(every: 1h, fn: mean)"
+
+	result, err := queryAPI.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	// Iterate over query response
+	for result.Next() {
+		app, ok := result.Record().ValueByKey("applicationPublicKey").(string)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing application public key: %v", result.Record().ValueByKey("applicationPublicKey"))
+		}
+		// TODO: log a warning on empty app key
+		if app == "" {
+			fmt.Println("Warning: empty application public key")
+			continue
+		}
+
+		// Remove leading and trailing '"' from app
+		app = strings.TrimPrefix(app, "\"")
+		app = strings.TrimSuffix(app, "\"")
+
+		hourlyTime, ok := result.Record().ValueByKey("_time").(time.Time)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing latency time: %v", result.Record().ValueByKey("_time"))
+		}
+
+		if result.Record().ValueByKey("_value") != nil {
+			hourlyAverageLatency, ok := result.Record().ValueByKey("_value").(float64)
+			if !ok {
+				return nil, fmt.Errorf("Error parsing latency time: %v", result.Record().ValueByKey("_value"))
+			}
+
+			latencyByHour := api.Latency{Time: hourlyTime, Latency: hourlyAverageLatency}
+
+			latencies[app] = append(latencies[app], latencyByHour)
+		}
+	}
+
+	// check for an error
+	if result.Err() != nil {
+		return nil, fmt.Errorf("query parsing error: %s", result.Err().Error())
+	}
+
+	client.Close()
+
+	return latencies, nil
 }
 
 func updateRelayCount(current api.RelayCounts, relayResult string, count int64) (api.RelayCounts, error) {

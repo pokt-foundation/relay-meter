@@ -42,6 +42,11 @@ type RelayCounts struct {
 	Failure int64
 }
 
+type Latency struct {
+	Time    time.Time
+	Latency float64
+}
+
 // TODO: refactor common fields
 type AppRelaysResponse struct {
 	Count       RelayCounts

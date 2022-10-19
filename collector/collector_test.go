@@ -76,9 +76,16 @@ func TestCollect(t *testing.T) {
 			if !source.todaysMetricsCollected {
 				t.Errorf("Expected todays metrics to be collected.")
 			}
+			if !source.todaysLatencyCollected {
+				t.Errorf("Expected todays latencies to be collected.")
+			}
 
 			if writer.todaysWrites != 1 {
 				t.Fatalf("Expected 1 write of todays metrics, got: %d", writer.todaysWrites)
+			}
+
+			if writer.todaysLatencyWrites != 1 {
+				t.Fatalf("Expected 1 write of todays latency metrics, got: %d", writer.todaysLatencyWrites)
 			}
 
 			if source.dailyMetricsCollected != tc.shouldCollectDaily {
@@ -148,8 +155,10 @@ type fakeSource struct {
 	responseErr error
 
 	todaysCounts           map[string]api.RelayCounts
+	todaysLatency          map[string][]api.Latency
 	todaysMetricsCollected bool
 	dailyMetricsCollected  bool
+	todaysLatencyCollected bool
 }
 
 func (f *fakeSource) DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error) {
@@ -164,11 +173,17 @@ func (f *fakeSource) TodaysCounts() (map[string]api.RelayCounts, error) {
 	return f.todaysCounts, nil
 }
 
+func (f *fakeSource) TodaysLatencies() (map[string][]api.Latency, error) {
+	f.todaysLatencyCollected = true
+	return f.todaysLatency, nil
+}
+
 type fakeWriter struct {
-	first        time.Time
-	last         time.Time
-	callsCount   int
-	todaysWrites int
+	first               time.Time
+	last                time.Time
+	callsCount          int
+	todaysWrites        int
+	todaysLatencyWrites int
 }
 
 func (f *fakeWriter) ExistingMetricsTimespan() (time.Time, time.Time, error) {
@@ -182,5 +197,10 @@ func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCo
 
 func (f *fakeWriter) WriteTodaysUsage(counts map[string]api.RelayCounts) error {
 	f.todaysWrites++
+	return nil
+}
+
+func (f *fakeWriter) WriteTodaysLatencies(latencies map[string][]api.Latency) error {
+	f.todaysLatencyWrites++
 	return nil
 }

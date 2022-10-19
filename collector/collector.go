@@ -18,6 +18,7 @@ const (
 type Source interface {
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	TodaysCounts() (map[string]api.RelayCounts, error)
+	TodaysLatencies() (map[string][]api.Latency, error)
 }
 
 type Writer interface {
@@ -28,6 +29,7 @@ type Writer interface {
 	// TODO: allow overwriting today's metrics
 	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts) error
 	WriteTodaysUsage(counts map[string]api.RelayCounts) error
+	WriteTodaysLatencies(latencies map[string][]api.Latency) error
 }
 
 type Collector interface {
@@ -78,11 +80,22 @@ func (c *collector) Collect(from, to time.Time) error {
 }
 
 func (c *collector) CollectTodaysMetrics() error {
+	todaysLatencies, err := c.Source.TodaysLatencies()
+	if err != nil {
+		return err
+	}
+	c.Logger.WithFields(logger.Fields{"todays_latencies_count": len(todaysLatencies)}).Info("Collected todays latencies")
+
 	todaysCounts, err := c.Source.TodaysCounts()
 	if err != nil {
 		return err
 	}
-	c.Logger.WithFields(logger.Fields{"todays_metrics_count": len(todaysCounts)}).Info("Collected todays metrics")
+	c.Logger.WithFields(logger.Fields{"todays_usage_count": len(todaysCounts)}).Info("Collected todays usage")
+
+	err = c.Writer.WriteTodaysLatencies(todaysLatencies)
+	if err != nil {
+		return err
+	}
 
 	return c.Writer.WriteTodaysUsage(todaysCounts)
 }
