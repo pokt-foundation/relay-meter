@@ -19,12 +19,14 @@ const (
 
 var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
-	appsRelaysPath    = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
-	allAppsRelaysPath = regexp.MustCompile(`^/v0/relays/apps`)
-	usersRelaysPath   = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
-	lbRelaysPath      = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
-	allLbsRelaysPath  = regexp.MustCompile(`^/v0/relays/endpoints`)
-	totalRelaysPath   = regexp.MustCompile(`^/v0/relays`)
+	appsRelaysPath     = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
+	allAppsRelaysPath  = regexp.MustCompile(`^/v0/relays/apps`)
+	usersRelaysPath    = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
+	lbRelaysPath       = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
+	allLbsRelaysPath   = regexp.MustCompile(`^/v0/relays/endpoints`)
+	totalRelaysPath    = regexp.MustCompile(`^/v0/relays`)
+	appsLatencyPath    = regexp.MustCompile(`^/v0/latency/apps/([[:alnum:]]+)$`)
+	allAppsLatencyPath = regexp.MustCompile(`^/v0/latency/apps`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -77,6 +79,20 @@ func handleAllLoadBalancersRelays(meter RelayMeter, l *logger.Logger, w http.Res
 func handleTotalRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.TotalRelays(from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleAppLatency(meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.AppLatency(app)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleAllAppsLatency(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.AllAppsLatency()
 	}
 	handleEndpoint(l, meterEndpoint, w, req)
 }
@@ -203,6 +219,16 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 		if totalRelaysPath.Match([]byte(req.URL.Path)) {
 			handleTotalRelays(meter, l, w, req)
+			return
+		}
+
+		if appID := match(appsLatencyPath, req.URL.Path); appID != "" {
+			handleAppLatency(meter, l, appID, w, req)
+			return
+		}
+
+		if allAppsLatencyPath.Match([]byte(req.URL.Path)) {
+			handleAllAppsLatency(meter, l, w, req)
 			return
 		}
 

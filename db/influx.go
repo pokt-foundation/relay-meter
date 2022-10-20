@@ -176,11 +176,14 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	return counts, nil
 }
 
+// TODO - add to utils-go package
 func roundFloat(val float64, precision uint) float64 {
 	ratio := math.Pow(10, float64(precision))
 	return math.Round(val*ratio) / ratio
 }
 
+// Fetches the last 24 hours of latency data from InfluxDB, sorted by applicationPublicKey
+// and broken up into hourly average latency (returned slice will be exactly 24 items)
 func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI(i.Options.Org)
@@ -188,6 +191,7 @@ func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 	latencies := make(map[string][]api.Latency)
 
 	// TODO: send queries in parallel
+	oneDayAgo := time.Now().Add(-time.Hour * 24).Format(time.RFC3339)
 	queryString := `from(bucket: %q)
 	  |> range(start: %s)
 	  |> filter(fn: (r) => r["_measurement"] == "relay")
@@ -195,7 +199,7 @@ func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 	  |> group(columns: ["host", "applicationPublicKey", "region", "result", "method"])
 	  |> keep(columns: ["applicationPublicKey", "_time", "_value"])
 	  |> aggregateWindow(every: 1h, fn: mean)`
-	fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, startOfDay(time.Now()).Format(time.RFC3339))
+	fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, oneDayAgo)
 
 	result, err := queryAPI.Query(context.Background(), fluxQuery)
 	if err != nil {
@@ -218,17 +222,20 @@ func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 		app = strings.TrimPrefix(app, "\"")
 		app = strings.TrimSuffix(app, "\"")
 
-		hourlyTime, ok := result.Record().ValueByKey("_time").(time.Time)
-		if !ok {
-			return nil, fmt.Errorf("Error parsing latency time: %v", result.Record().ValueByKey("_time"))
-		}
-
-		if result.Record().ValueByKey("_value") != nil {
-			hourlyAverageLatency, ok := result.Record().ValueByKey("_value").(float64)
+		if len(latencies[app]) < 24 {
+			hourlyTime, ok := result.Record().ValueByKey("_time").(time.Time)
 			if !ok {
-				return nil, fmt.Errorf("Error parsing latency time: %v", result.Record().ValueByKey("_value"))
+				return nil, fmt.Errorf("Error parsing latency time: %v", result.Record().ValueByKey("_time"))
 			}
 
+			hourlyAverageLatency := float64(0)
+			if result.Record().ValueByKey("_value") != nil {
+				hourlyAverageLatency, ok = result.Record().ValueByKey("_value").(float64)
+				if !ok {
+					return nil, fmt.Errorf("Error parsing latency time: %v", result.Record().ValueByKey("_value"))
+				}
+
+			}
 			latencyByHour := api.Latency{Time: hourlyTime, Latency: roundFloat(hourlyAverageLatency, 5)}
 
 			latencies[app] = append(latencies[app], latencyByHour)

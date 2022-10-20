@@ -12,91 +12,43 @@ import (
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/pokt-foundation/portal-api-go/repository"
+	"github.com/pokt-foundation/utils-go/environment"
 
 	// TODO: replace with pokt-foundation/relay-meter
 	"github.com/adshmh/meter/api"
-	"github.com/adshmh/meter/cmd"
 	"github.com/adshmh/meter/db"
 )
 
-const (
-	LOAD_INTERVAL_DEFAULT_SECONDS      = 30
-	DAILY_METRICS_TTL_DEFAULT_SECONDS  = 120
-	TODAYS_METRICS_TTL_DEFAULT_SECONDS = 60
-	MAX_ARCHIVE_AGE_DEFAULT_DAYS       = 30
-	SERVER_PORT_DEFAULT                = 9898
+var (
+	postgresUser     = environment.MustGetString("POSTGRES_USER")
+	postgresPassword = environment.MustGetString("POSTGRES_PASSWORD")
+	postgresDB       = environment.MustGetString("POSTGRES_DB")
+	postgresHost     = environment.MustGetString("POSTGRES_HOST")
 
-	ENV_LOAD_INTERVAL_SECONDS      = "LOAD_INTERVAL_SECONDS"
-	ENV_DAILY_METRICS_TTL_SECONDS  = "DAILY_METRICS_TTL_SECONDS"
-	ENV_TODAYS_METRICS_TTL_SECONDS = "TODAYS_METRICS_TTL_SECONDS"
-	ENV_MAX_ARCHIVE_AGE_DAYS       = "MAX_ARCHIVE_AGE"
-	ENV_SERVER_PORT                = "API_SERVER_PORT"
-	ENV_BACKEND_API_URL            = "BACKEND_API_URL"
-	ENV_BACKEND_API_TOKEN          = "BACKEND_API_TOKEN"
+	backendAPIURL   = environment.MustGetString("BACKEND_API_URL")
+	backendAPIToken = environment.MustGetString("BACKEND_API_TOKEN")
+
+	loadInterval            = int(environment.GetInt64("LOAD_INTERVAL_SECONDS", 30))
+	dailyMetricsTTLSeconds  = int(environment.GetInt64("DAILY_METRICS_TTL_SECONDS", 120))
+	todaysMetricsTTLSeconds = int(environment.GetInt64("TODAYS_METRICS_TTL_SECONDS", 60))
+	maxPastDays             = int(environment.GetInt64("MAX_ARCHIVE_AGE", 30))
+	port                    = int(environment.GetInt64("API_SERVER_PORT", 9898))
 )
-
-type options struct {
-	loadInterval            int
-	dailyMetricsTTLSeconds  int
-	todaysMetricsTTLSeconds int
-	maxPastDays             int
-	port                    int
-	backendApiUrl           string
-	backendApiToken         string
-}
-
-func gatherOptions() (options, error) {
-	options := options{}
-
-	optsItems := []struct {
-		value        *int
-		defaultValue int
-		envVar       string
-	}{
-		{value: &options.loadInterval, defaultValue: LOAD_INTERVAL_DEFAULT_SECONDS, envVar: ENV_LOAD_INTERVAL_SECONDS},
-		{value: &options.dailyMetricsTTLSeconds, defaultValue: DAILY_METRICS_TTL_DEFAULT_SECONDS, envVar: ENV_DAILY_METRICS_TTL_SECONDS},
-		{value: &options.todaysMetricsTTLSeconds, defaultValue: TODAYS_METRICS_TTL_DEFAULT_SECONDS, envVar: ENV_TODAYS_METRICS_TTL_SECONDS},
-		{value: &options.maxPastDays, defaultValue: MAX_ARCHIVE_AGE_DEFAULT_DAYS, envVar: ENV_MAX_ARCHIVE_AGE_DAYS},
-		{value: &options.port, defaultValue: SERVER_PORT_DEFAULT, envVar: ENV_SERVER_PORT},
-	}
-
-	for _, o := range optsItems {
-		value, err := cmd.GetIntFromEnv(o.envVar, o.defaultValue)
-		if err != nil {
-			return options, err
-		}
-		*o.value = value
-	}
-
-	backendUrl := os.Getenv(ENV_BACKEND_API_URL)
-	if backendUrl == "" {
-		return options, fmt.Errorf("Missing required environment variable: %s", ENV_BACKEND_API_URL)
-	}
-	options.backendApiUrl = backendUrl
-
-	token := os.Getenv(ENV_BACKEND_API_TOKEN)
-	if token == "" {
-		return options, fmt.Errorf("Missing required environment variable: %s", ENV_BACKEND_API_TOKEN)
-	}
-	options.backendApiToken = token
-
-	return options, nil
-}
 
 type backendProvider struct {
 	db.PostgresClient
-	backendApiUrl   string
-	backendApiToken string
+	backendAPIURL   string
+	backendAPIToken string
 }
 
 func (b *backendProvider) UserApps(user string) ([]string, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/user/%s/application", b.backendApiUrl, user), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/user/%s/application", b.backendAPIURL, user), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Authorization", b.backendApiToken)
+	req.Header.Add("Authorization", b.backendAPIToken)
 
 	client := http.Client{}
 	resp, err := client.Do(req)
@@ -128,11 +80,11 @@ func (b *backendProvider) UserApps(user string) ([]string, error) {
 func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.backendApiUrl, endpoint), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.backendAPIURL, endpoint), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Authorization", b.backendApiToken)
+	req.Header.Add("Authorization", b.backendAPIToken)
 
 	client := http.Client{}
 	resp, err := client.Do(req)
@@ -157,11 +109,11 @@ func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalance
 func (b *backendProvider) LoadBalancers() ([]*repository.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer", b.backendApiUrl), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer", b.backendAPIURL), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Authorization", b.backendApiToken)
+	req.Header.Add("Authorization", b.backendAPIToken)
 
 	client := http.Client{}
 	resp, err := client.Do(req)
@@ -187,13 +139,12 @@ func (b *backendProvider) LoadBalancers() ([]*repository.LoadBalancer, error) {
 func main() {
 	log := logger.New()
 
-	options, err := gatherOptions()
-	if err != nil {
-		log.WithFields(logger.Fields{"error": err, "options": options}).Warn("Invalid options specified")
-		os.Exit(1)
+	postgresOptions := db.PostgresOptions{
+		User:     postgresUser,
+		Password: postgresPassword,
+		Host:     postgresHost,
+		DB:       postgresDB,
 	}
-
-	postgresOptions := cmd.GatherPostgresOptions()
 	pgClient, err := db.NewPostgresClient(postgresOptions)
 	if err != nil {
 		fmt.Errorf("Error setting up Postgres client: %v\n", err)
@@ -202,23 +153,22 @@ func main() {
 
 	// TODO: make the data loader run interval configurable
 	meterOptions := api.RelayMeterOptions{
-		LoadInterval:     time.Duration(options.loadInterval) * time.Second,
-		DailyMetricsTTL:  time.Duration(options.dailyMetricsTTLSeconds) * time.Second,
-		TodaysMetricsTTL: time.Duration(options.todaysMetricsTTLSeconds) * time.Second,
-		MaxPastDays:      time.Duration(options.maxPastDays) * 24 * time.Hour,
+		LoadInterval:     time.Duration(loadInterval) * time.Second,
+		DailyMetricsTTL:  time.Duration(dailyMetricsTTLSeconds) * time.Second,
+		TodaysMetricsTTL: time.Duration(todaysMetricsTTLSeconds) * time.Second,
+		MaxPastDays:      time.Duration(maxPastDays) * 24 * time.Hour,
 	}
-	log.WithFields(logger.Fields{"postgresOptions": postgresOptions, "meterOptions": meterOptions}).Info("Gathered options.")
 
 	backend := backendProvider{
 		PostgresClient:  pgClient,
-		backendApiUrl:   options.backendApiUrl,
-		backendApiToken: options.backendApiToken,
+		backendAPIURL:   backendAPIURL,
+		backendAPIToken: backendAPIToken,
 	}
 	meter := api.NewRelayMeter(&backend, log, meterOptions)
 	http.HandleFunc("/", api.GetHttpServer(meter, log))
 
 	log.Info("Starting the apiserver...")
-	http.ListenAndServe(fmt.Sprintf(":%d", options.port), nil)
+	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 
 	log.Warn("Unexpected exit.")
 }

@@ -3,7 +3,9 @@ package db
 // TODO: do we need a more secure way of passing the passwords?
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,15 +13,16 @@ import (
 
 	"database/sql"
 
-	_ "github.com/lib/pq"
-
 	"github.com/adshmh/meter/api"
+	// PQ import is required
+	_ "github.com/lib/pq"
 )
 
 // TODO: db package needs some form of unit testing
 const (
-	DAY_LAYOUT       = "2006-01-02"
-	TABLE_DAILY_SUMS = "daily_app_sums"
+	pgTimeFormat   = "2006-01-02 15:04:00Z"
+	dayLayout      = "2006-01-02"
+	tableDailySums = "daily_app_sums"
 )
 
 // Will be implemented by Postgres DB interface
@@ -28,6 +31,7 @@ type Reporter interface {
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	// TodaysUsage returns the metrics for today so far
 	TodaysUsage() (map[string]api.RelayCounts, error)
+	TodaysLatency() (map[string][]api.Latency, error)
 }
 
 // Will be implemented by Postgres DB interface
@@ -55,6 +59,7 @@ type PostgresClient interface {
 func NewPostgresClient(options PostgresOptions) (PostgresClient, error) {
 	// TODO: add '?sslmode=verify-full' to connection string?
 	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", options.User, options.Password, options.Host, options.DB)
+
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, err
@@ -71,8 +76,8 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 	ctx := context.Background()
 	// TODO: delegate dealing with the timestamps to the sql query: looks like there is a bug in QueryContext in dealing with parameters
 	q := fmt.Sprintf("SELECT (time, application, count_success, count_failure) FROM daily_app_sums as d WHERE d.time >= '%s' and d.time <= '%s'",
-		from.Format(DAY_LAYOUT),
-		to.Format(DAY_LAYOUT),
+		from.Format(dayLayout),
+		to.Format(dayLayout),
 	)
 	rows, err := p.DB.QueryContext(ctx, q)
 	if err != nil {
@@ -80,7 +85,6 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 	}
 	defer rows.Close()
 
-	const timeFormat = "2006-01-02 15:04:00+00"
 	dailyUsage := make(map[time.Time]map[string]api.RelayCounts)
 	for rows.Next() {
 		var r string
@@ -98,15 +102,15 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 			return nil, fmt.Errorf("Invalid format in query output: %s", r)
 		}
 
-		ts, err := time.Parse(timeFormat, items[0])
+		ts, err := time.Parse(pgTimeFormat, items[0])
 		if err != nil {
 			return nil, fmt.Errorf("Invalid time format: %s in query result line: %s, error: %v", items[0], r, err)
 		}
-		count_success, err := strconv.ParseInt(items[2], 10, 64) // bitsize 64 for int64 return
+		countSuccess, err := strconv.ParseInt(items[2], 10, 64) // bitsize 64 for int64 return
 		if err != nil {
 			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[2], r, err)
 		}
-		count_failure, err := strconv.ParseInt(items[3], 10, 64) // bitsize 64 for int64 return
+		countFailure, err := strconv.ParseInt(items[3], 10, 64) // bitsize 64 for int64 return
 		if err != nil {
 			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[3], r, err)
 		}
@@ -118,7 +122,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 		if dailyUsage[ts] == nil {
 			dailyUsage[ts] = make(map[string]api.RelayCounts)
 		}
-		dailyUsage[ts][app] = api.RelayCounts{Success: count_success, Failure: count_failure}
+		dailyUsage[ts][app] = api.RelayCounts{Success: countSuccess, Failure: countFailure}
 	}
 	// TODO: verify this is needed
 	if rerr := rows.Close(); rerr != nil {
@@ -164,7 +168,7 @@ func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCoun
 
 func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	ctx := context.Background()
-	row := p.DB.QueryRowContext(ctx, fmt.Sprintf("SELECT count(*), COALESCE(min(time), '2003-01-02 03:04' ), COALESCE(max(time), '2003-01-02 03:04') FROM %s", TABLE_DAILY_SUMS))
+	row := p.DB.QueryRowContext(ctx, fmt.Sprintf("SELECT count(*), COALESCE(min(time), '2003-01-02 03:04' ), COALESCE(max(time), '2003-01-02 03:04') FROM %s", tableDailySums))
 	var countStr, firstStr, lastStr string
 	var first, last time.Time
 	if err := row.Scan(&countStr, &firstStr, &lastStr); err != nil {
@@ -277,11 +281,22 @@ func (p *pgClient) writeTodaysLatency(latencies map[string][]api.Latency) error 
 	return nil
 }
 
+func PrettyString(thing interface{}) {
+	jsonThing, _ := json.Marshal(thing)
+	str := string(jsonThing)
+
+	var prettyJSON bytes.Buffer
+	json.Indent(&prettyJSON, []byte(str), "", "    ")
+	output := prettyJSON.String()
+
+	fmt.Println(output)
+}
+
 // TodaysUsage returns the current day's metrics so far.
-func (pg *pgClient) TodaysUsage() (map[string]api.RelayCounts, error) {
+func (p *pgClient) TodaysUsage() (map[string]api.RelayCounts, error) {
 	// TODO: factor-out the SQL statements
 	ctx := context.Background()
-	rows, err := pg.DB.QueryContext(ctx, "SELECT (application, count_success, count_failure) FROM todays_app_sums")
+	rows, err := p.DB.QueryContext(ctx, "SELECT (application, count_success, count_failure) FROM todays_app_sums")
 	if err != nil {
 		return nil, err
 	}
@@ -304,11 +319,11 @@ func (pg *pgClient) TodaysUsage() (map[string]api.RelayCounts, error) {
 			return nil, fmt.Errorf("Invalid format in query output: %s", r)
 		}
 
-		count_success, err := strconv.ParseInt(items[1], 10, 64) // bitsize 64 for int64 return
+		countSuccess, err := strconv.ParseInt(items[1], 10, 64) // bitsize 64 for int64 return
 		if err != nil {
 			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[1], r, err)
 		}
-		count_failure, err := strconv.ParseInt(items[2], 10, 64) // bitsize 64 for int64 return
+		countFailure, err := strconv.ParseInt(items[2], 10, 64) // bitsize 64 for int64 return
 		if err != nil {
 			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[2], r, err)
 		}
@@ -317,7 +332,7 @@ func (pg *pgClient) TodaysUsage() (map[string]api.RelayCounts, error) {
 			return nil, fmt.Errorf("Empty application public key, in query result line: %s", r)
 		}
 
-		todaysUsage[app] = api.RelayCounts{Success: count_success, Failure: count_failure}
+		todaysUsage[app] = api.RelayCounts{Success: countSuccess, Failure: countFailure}
 	}
 	// TODO: verify this is needed
 	if rerr := rows.Close(); rerr != nil {
@@ -329,6 +344,62 @@ func (pg *pgClient) TodaysUsage() (map[string]api.RelayCounts, error) {
 	}
 
 	return todaysUsage, nil
+}
+
+// TodaysLatency returns the past 24 hours' latency per app.
+func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
+	// TODO: factor-out the SQL statements
+	ctx := context.Background()
+	rows, err := p.DB.QueryContext(ctx, "SELECT (application, time, latency) FROM todays_app_latencies")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	todaysLatency := make(map[string][]api.Latency)
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return nil, err
+		}
+
+		// Example of query output:
+		// (46d4474f0a60f062103b1867c7edac323e58f416e7458f436623b9d96eb44b37,18931)
+		r = strings.ReplaceAll(r, "\"", "")
+		r = strings.TrimPrefix(r, "(")
+		r = strings.TrimSuffix(r, ")")
+		items := strings.Split(r, ",")
+		if len(items) != 3 {
+			return nil, fmt.Errorf("Invalid format in query output: %s", r)
+		}
+
+		hourlyTime, err := time.Parse(pgTimeFormat, items[1])
+		if err != nil {
+			return nil, fmt.Errorf("Invalid latency time format: %s in query result line: %s, error: %v", items[1], r, err)
+		}
+		hourlyAverageLatency, err := strconv.ParseFloat(items[2], 32)
+		if err != nil {
+			return nil, fmt.Errorf("Invalid latency format: %s in query result line: %s, error: %v", items[2], r, err)
+		}
+		app := items[0]
+		if app == "" {
+			return nil, fmt.Errorf("Empty application public key, in query result line: %s", r)
+		}
+
+		latencyByHour := api.Latency{Time: hourlyTime, Latency: roundFloat(hourlyAverageLatency, 5)}
+
+		todaysLatency[app] = append(todaysLatency[app], latencyByHour)
+	}
+	// TODO: verify this is needed
+	if rerr := rows.Close(); rerr != nil {
+		return nil, rerr
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return todaysLatency, nil
 }
 
 func parseDate(source string) (time.Time, error) {
