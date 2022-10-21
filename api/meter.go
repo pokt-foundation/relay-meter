@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ const (
 
 var (
 	ErrLoadBalancerNotFound = errors.New("loadbalancer/endpoint not found")
+	ErrAppLatencyNotFound   = errors.New("app latency not found")
 )
 
 type RelayMeter interface {
@@ -36,7 +38,7 @@ type RelayMeter interface {
 	LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
 	AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error)
 	AppLatency(app string) (AppLatencyResponse, error)
-	AllAppsLatency() ([]AppLatencyResponse, error)
+	AllAppsLatencies() ([]AppLatencyResponse, error)
 }
 
 type RelayCounts struct {
@@ -172,7 +174,6 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 		todaysLatency, err = r.Backend.TodaysLatency()
 		if err != nil {
 			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading todays latency data")
-			return err
 		}
 
 		r.Logger.WithFields(logger.Fields{"todays_metrics_count": len(todaysUsage)}).Info("Received todays metrics")
@@ -261,27 +262,39 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 func (r *relayMeter) AppLatency(app string) (AppLatencyResponse, error) {
 	r.Logger.WithFields(logger.Fields{"app": app}).Info("apiserver: Received AppLatency request")
 
-	resp := AppLatencyResponse{
-		Application:  app,
-		DailyLatency: r.todaysLatency[app],
-		From:         r.todaysLatency[app][0].Time,
-		To:           r.todaysLatency[app][23].Time,
+	appLatency := r.todaysLatency[app]
+
+	if len(appLatency) == 0 {
+		return AppLatencyResponse{}, ErrAppLatencyNotFound
 	}
 
-	return resp, nil
+	sort.Slice(appLatency, func(i, j int) bool {
+		return appLatency[i].Time.Before(appLatency[j].Time)
+	})
+
+	return AppLatencyResponse{
+		Application:  app,
+		DailyLatency: appLatency,
+		From:         appLatency[0].Time,
+		To:           appLatency[len(appLatency)-1].Time,
+	}, nil
 }
 
-func (r *relayMeter) AllAppsLatency() ([]AppLatencyResponse, error) {
-	r.Logger.Info("apiserver: Received AllAppsLatency request")
+func (r *relayMeter) AllAppsLatencies() ([]AppLatencyResponse, error) {
+	r.Logger.Info("apiserver: Received AllAppsLatencies request")
 
 	resp := []AppLatencyResponse{}
 
 	for app, appLatency := range r.todaysLatency {
+		sort.Slice(appLatency, func(i, j int) bool {
+			return appLatency[i].Time.Before(appLatency[j].Time)
+		})
+
 		latencyResp := AppLatencyResponse{
 			Application:  app,
 			DailyLatency: appLatency,
 			From:         appLatency[0].Time,
-			To:           appLatency[23].Time,
+			To:           appLatency[len(appLatency)-1].Time,
 		}
 
 		resp = append(resp, latencyResp)

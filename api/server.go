@@ -92,7 +92,7 @@ func handleAppLatency(meter RelayMeter, l *logger.Logger, app string, w http.Res
 
 func handleAllAppsLatency(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AllAppsLatency()
+		return meter.AllAppsLatencies()
 	}
 	handleEndpoint(l, meterEndpoint, w, req)
 }
@@ -207,6 +207,11 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 			return
 		}
 
+		if appID := match(appsLatencyPath, req.URL.Path); appID != "" {
+			handleAppLatency(meter, l, appID, w, req)
+			return
+		}
+
 		if allAppsRelaysPath.Match([]byte(req.URL.Path)) {
 			handleAllAppsRelays(meter, l, w, req)
 			return
@@ -219,11 +224,6 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 		if totalRelaysPath.Match([]byte(req.URL.Path)) {
 			handleTotalRelays(meter, l, w, req)
-			return
-		}
-
-		if appID := match(appsLatencyPath, req.URL.Path); appID != "" {
-			handleAppLatency(meter, l, appID, w, req)
 			return
 		}
 

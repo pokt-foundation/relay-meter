@@ -537,7 +537,7 @@ func (f *fakeRelayMeter) AppLatency(app string) (AppLatencyResponse, error) {
 	return f.latencyResponse, f.responseErr
 }
 
-func (f *fakeRelayMeter) AllAppsLatency() ([]AppLatencyResponse, error) {
+func (f *fakeRelayMeter) AllAppsLatencies() ([]AppLatencyResponse, error) {
 	return f.allLatencyResponse, f.responseErr
 }
 

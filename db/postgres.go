@@ -3,9 +3,7 @@ package db
 // TODO: do we need a more secure way of passing the passwords?
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -279,17 +277,6 @@ func (p *pgClient) writeTodaysLatency(latencies map[string][]api.Latency) error 
 		return err
 	}
 	return nil
-}
-
-func PrettyString(thing interface{}) {
-	jsonThing, _ := json.Marshal(thing)
-	str := string(jsonThing)
-
-	var prettyJSON bytes.Buffer
-	json.Indent(&prettyJSON, []byte(str), "", "    ")
-	output := prettyJSON.String()
-
-	fmt.Println(output)
 }
 
 // TodaysUsage returns the current day's metrics so far.
