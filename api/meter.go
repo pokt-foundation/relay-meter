@@ -175,7 +175,6 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 		if err != nil {
 			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading todays latency data")
 		}
-
 		r.Logger.WithFields(logger.Fields{"todays_metrics_count": len(todaysUsage)}).Info("Received todays metrics")
 	}
 
