@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ import (
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/pokt-foundation/portal-api-go/repository"
+	"github.com/pokt-foundation/utils-go/numbers"
 )
 
 func TestUserRelays(t *testing.T) {
@@ -1265,12 +1265,6 @@ func fakeTodaysMetrics() map[string]RelayCounts {
 	}
 }
 
-// TODO - add to utils-go package
-func roundFloat(val float64, precision uint) float64 {
-	ratio := math.Pow(10, float64(precision))
-	return math.Round(val*ratio) / ratio
-}
-
 func fakeTodaysLatency() map[string][]Latency {
 	hourFormat := "2006-01-02 15:04:00Z"
 	now, _ := time.Parse(hourFormat, time.Now().Format(hourFormat))
@@ -1280,7 +1274,7 @@ func fakeTodaysLatency() map[string][]Latency {
 	for i := 0; i < 24; i++ {
 		latencyMetrics = append(latencyMetrics, Latency{
 			Time:    now.Add(-(time.Hour * time.Duration(24-i+1))),
-			Latency: roundFloat(0.11111+(float64(i)*0.01111), 5),
+			Latency: numbers.RoundFloat(0.11111+(float64(i)*0.01111), 5),
 		})
 	}
 

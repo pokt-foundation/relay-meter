@@ -4,12 +4,12 @@ package db
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/http"
 	"strings"
 	"time"
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/pokt-foundation/utils-go/numbers"
 
 	"github.com/adshmh/meter/api"
 )
@@ -176,12 +176,6 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	return counts, nil
 }
 
-// TODO - add to utils-go package
-func roundFloat(val float64, precision uint) float64 {
-	ratio := math.Pow(10, float64(precision))
-	return math.Round(val*ratio) / ratio
-}
-
 // Fetches the last 24 hours of latency data from InfluxDB, sorted by applicationPublicKey
 // and broken up into hourly average latency (returned slice will be exactly 24 items)
 func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
@@ -236,7 +230,8 @@ func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 				}
 
 			}
-			latencyByHour := api.Latency{Time: hourlyTime, Latency: roundFloat(hourlyAverageLatency, 5)}
+
+			latencyByHour := api.Latency{Time: hourlyTime, Latency: numbers.RoundFloat(hourlyAverageLatency, 5)}
 
 			latencies[app] = append(latencies[app], latencyByHour)
 		}

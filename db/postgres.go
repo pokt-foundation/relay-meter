@@ -12,6 +12,8 @@ import (
 	"database/sql"
 
 	"github.com/adshmh/meter/api"
+	"github.com/pokt-foundation/utils-go/numbers"
+
 	// PQ import is required
 	_ "github.com/lib/pq"
 )
@@ -373,7 +375,7 @@ func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 			return nil, fmt.Errorf("Empty application public key, in query result line: %s", r)
 		}
 
-		latencyByHour := api.Latency{Time: hourlyTime, Latency: roundFloat(hourlyAverageLatency, 5)}
+		latencyByHour := api.Latency{Time: hourlyTime, Latency: numbers.RoundFloat(hourlyAverageLatency, 5)}
 
 		todaysLatency[app] = append(todaysLatency[app], latencyByHour)
 	}
