@@ -12,6 +12,7 @@ import (
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/pokt-foundation/portal-api-go/repository"
+	"github.com/pokt-foundation/utils-go/environment"
 
 	// TODO: replace with pokt-foundation/relay-meter
 	"github.com/adshmh/meter/api"
@@ -20,67 +21,41 @@ import (
 )
 
 const (
-	LOAD_INTERVAL_DEFAULT_SECONDS      = 30
-	DAILY_METRICS_TTL_DEFAULT_SECONDS  = 120
-	TODAYS_METRICS_TTL_DEFAULT_SECONDS = 60
-	MAX_ARCHIVE_AGE_DEFAULT_DAYS       = 30
-	SERVER_PORT_DEFAULT                = 9898
-
+	ENV_BACKEND_API_URL            = "BACKEND_API_URL"
+	ENV_BACKEND_API_TOKEN          = "BACKEND_API_TOKEN"
 	ENV_LOAD_INTERVAL_SECONDS      = "LOAD_INTERVAL_SECONDS"
 	ENV_DAILY_METRICS_TTL_SECONDS  = "DAILY_METRICS_TTL_SECONDS"
 	ENV_TODAYS_METRICS_TTL_SECONDS = "TODAYS_METRICS_TTL_SECONDS"
 	ENV_MAX_ARCHIVE_AGE_DAYS       = "MAX_ARCHIVE_AGE"
 	ENV_SERVER_PORT                = "API_SERVER_PORT"
-	ENV_BACKEND_API_URL            = "BACKEND_API_URL"
-	ENV_BACKEND_API_TOKEN          = "BACKEND_API_TOKEN"
+
+	LOAD_INTERVAL_DEFAULT_SECONDS      = 30
+	DAILY_METRICS_TTL_DEFAULT_SECONDS  = 120
+	TODAYS_METRICS_TTL_DEFAULT_SECONDS = 60
+	MAX_ARCHIVE_AGE_DEFAULT_DAYS       = 30
+	SERVER_PORT_DEFAULT                = 9898
 )
 
 type options struct {
+	backendApiUrl           string
+	backendApiToken         string
 	loadInterval            int
 	dailyMetricsTTLSeconds  int
 	todaysMetricsTTLSeconds int
 	maxPastDays             int
 	port                    int
-	backendApiUrl           string
-	backendApiToken         string
 }
 
-func gatherOptions() (options, error) {
-	options := options{}
-
-	optsItems := []struct {
-		value        *int
-		defaultValue int
-		envVar       string
-	}{
-		{value: &options.loadInterval, defaultValue: LOAD_INTERVAL_DEFAULT_SECONDS, envVar: ENV_LOAD_INTERVAL_SECONDS},
-		{value: &options.dailyMetricsTTLSeconds, defaultValue: DAILY_METRICS_TTL_DEFAULT_SECONDS, envVar: ENV_DAILY_METRICS_TTL_SECONDS},
-		{value: &options.todaysMetricsTTLSeconds, defaultValue: TODAYS_METRICS_TTL_DEFAULT_SECONDS, envVar: ENV_TODAYS_METRICS_TTL_SECONDS},
-		{value: &options.maxPastDays, defaultValue: MAX_ARCHIVE_AGE_DEFAULT_DAYS, envVar: ENV_MAX_ARCHIVE_AGE_DAYS},
-		{value: &options.port, defaultValue: SERVER_PORT_DEFAULT, envVar: ENV_SERVER_PORT},
+func gatherOptions() options {
+	return options{
+		backendApiUrl:           environment.MustGetString(ENV_BACKEND_API_URL),
+		backendApiToken:         environment.MustGetString(ENV_BACKEND_API_TOKEN),
+		loadInterval:            int(environment.GetInt64(ENV_LOAD_INTERVAL_SECONDS, LOAD_INTERVAL_DEFAULT_SECONDS)),
+		dailyMetricsTTLSeconds:  int(environment.GetInt64(ENV_DAILY_METRICS_TTL_SECONDS, DAILY_METRICS_TTL_DEFAULT_SECONDS)),
+		todaysMetricsTTLSeconds: int(environment.GetInt64(ENV_TODAYS_METRICS_TTL_SECONDS, TODAYS_METRICS_TTL_DEFAULT_SECONDS)),
+		maxPastDays:             int(environment.GetInt64(ENV_MAX_ARCHIVE_AGE_DAYS, MAX_ARCHIVE_AGE_DEFAULT_DAYS)),
+		port:                    int(environment.GetInt64(ENV_SERVER_PORT, SERVER_PORT_DEFAULT)),
 	}
-
-	for _, o := range optsItems {
-		value, err := cmd.GetIntFromEnv(o.envVar, o.defaultValue)
-		if err != nil {
-			return options, err
-		}
-		*o.value = value
-	}
-
-	backendUrl := os.Getenv(ENV_BACKEND_API_URL)
-	if backendUrl == "" {
-		return options, fmt.Errorf("Missing required environment variable: %s", ENV_BACKEND_API_URL)
-	}
-	options.backendApiUrl = backendUrl
-
-	token := os.Getenv(ENV_BACKEND_API_TOKEN)
-	if token == "" {
-		return options, fmt.Errorf("Missing required environment variable: %s", ENV_BACKEND_API_TOKEN)
-	}
-	options.backendApiToken = token
-
-	return options, nil
 }
 
 type backendProvider struct {
@@ -187,11 +162,7 @@ func (b *backendProvider) LoadBalancers() ([]*repository.LoadBalancer, error) {
 func main() {
 	log := logger.New()
 
-	options, err := gatherOptions()
-	if err != nil {
-		log.WithFields(logger.Fields{"error": err, "options": options}).Warn("Invalid options specified")
-		os.Exit(1)
-	}
+	options := gatherOptions()
 
 	postgresOptions := cmd.GatherPostgresOptions()
 	pgClient, err := db.NewPostgresClient(postgresOptions)
