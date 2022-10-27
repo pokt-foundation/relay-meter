@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/pokt-foundation/utils-go/environment"
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/adshmh/meter/cmd"
@@ -14,13 +15,13 @@ import (
 )
 
 const (
-	COLLECT_INTERVAL_DEFAULT_SECONDS = 300
-	REPORT_INTERVAL_DEFAULT_SECONDS  = 30
-	MAX_ARCHIVE_AGE_DEFAULT_DAYS     = 30
-
 	ENV_COLLECT_INTERVAL_SECONDS = "COLLECTION_INTERVAL_SECONDS"
 	ENV_REPORT_INTERVAL_SECONDS  = "REPORT_INTERVAL_SECONDS"
 	ENV_MAX_ARCHIVE_AGE_DAYS     = "MAX_ARCHIVE_AGE"
+
+	COLLECT_INTERVAL_DEFAULT_SECONDS = 300
+	REPORT_INTERVAL_DEFAULT_SECONDS  = 30
+	MAX_ARCHIVE_AGE_DEFAULT_DAYS     = 30
 )
 
 type options struct {
@@ -29,27 +30,12 @@ type options struct {
 	maxArchiveAgeDays  int
 }
 
-func gatherOptions() (options, error) {
-	collectionInterval, err := cmd.GetIntFromEnv(ENV_COLLECT_INTERVAL_SECONDS, COLLECT_INTERVAL_DEFAULT_SECONDS)
-	if err != nil {
-		return options{}, err
-	}
-
-	reportingInterval, err := cmd.GetIntFromEnv(ENV_REPORT_INTERVAL_SECONDS, REPORT_INTERVAL_DEFAULT_SECONDS)
-	if err != nil {
-		return options{}, err
-	}
-
-	maxArchiveAge, err := cmd.GetIntFromEnv(ENV_MAX_ARCHIVE_AGE_DAYS, MAX_ARCHIVE_AGE_DEFAULT_DAYS)
-	if err != nil {
-		return options{}, err
-	}
-
+func gatherOptions() options {
 	return options{
-		collectionInterval: collectionInterval,
-		reportingInterval:  reportingInterval,
-		maxArchiveAgeDays:  maxArchiveAge,
-	}, nil
+		collectionInterval: int(environment.GetInt64(ENV_COLLECT_INTERVAL_SECONDS, COLLECT_INTERVAL_DEFAULT_SECONDS)),
+		reportingInterval:  int(environment.GetInt64(ENV_REPORT_INTERVAL_SECONDS, REPORT_INTERVAL_DEFAULT_SECONDS)),
+		maxArchiveAgeDays:  int(environment.GetInt64(ENV_MAX_ARCHIVE_AGE_DAYS, MAX_ARCHIVE_AGE_DEFAULT_DAYS)),
+	}
 }
 
 // TODO: need a /health endpoint
@@ -64,11 +50,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	options, err := gatherOptions()
-	if err != nil {
-		fmt.Errorf("Error gathering options: %v", err)
-		os.Exit(1)
-	}
+	options := gatherOptions()
 
 	fmt.Printf("Starting the collector...")
 	collector := collector.NewCollector(influxClient, pgClient, time.Duration(options.maxArchiveAgeDays)*24*time.Hour, logger.New())
