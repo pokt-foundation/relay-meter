@@ -3,10 +3,8 @@ name: docker
 on:
   push:
     branches:
-      - 'main'
-      - 'v*.*.*'
     tags:
-      - 'v*'
+      - '*'
   pull_request:
     branches:
       - 'main'
