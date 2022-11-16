@@ -39,6 +39,7 @@ type influxDB struct {
 }
 
 // DailyCounts Returns total of number of daily relays per application, up to and including the specified day
+//
 //	Each app will have an entry per day
 func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
@@ -172,6 +173,73 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	return counts, nil
 }
 
+func (i *influxDB) TodaysCountsPerOrigin() (map[string]int64, error) {
+	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
+	queryAPI := client.QueryAPI(i.Options.Org)
+
+	counts := make(map[string]int64)
+	// TODO: send queries in parallel
+	query := fmt.Sprintf("from(bucket: %q)", i.Options.CurrentBucket) +
+		fmt.Sprintf(" |> range(start: %s,stop: %s)", startOfDay(time.Now()).Format(time.RFC3339), time.Now().Format(time.RFC3339)) +
+		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "origin") +
+		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
+		fmt.Sprintf(" |> group(columns: [%q])", "origin") +
+		" |> agregateWindow(every: 24h, fn:mean, createEmpty: false)" +
+		fmt.Sprintf(" |> yield(name:%q)", "mean")
+
+	result, err := queryAPI.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	// Iterate over query response
+	for result.Next() {
+		app, ok := result.Record().ValueByKey("origin").(string)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing application public key: %v", result.Record().ValueByKey("applicationPublicKey"))
+		}
+		// TODO: log a warning on empty app key
+		if app == "" {
+			fmt.Println("Warning: empty application public key")
+			continue
+		}
+
+		// Remove leading and trailing '"' from app
+		app = strings.TrimPrefix(app, "\"")
+		app = strings.TrimSuffix(app, "\"")
+
+		origin, ok := result.Record().ValueByKey("origin").(string)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing application origin: %v", result.Record().ValueByKey("origin"))
+		}
+		// TODO: log a warning on empty app key
+		if origin == "" {
+			fmt.Println("Warning: empty application origin")
+			continue
+		}
+
+		count, ok := result.Record().Value().(int64)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing application %s relay counts %v", app, result.Record().Value())
+		}
+
+		if counts[origin] == 0 {
+			counts[origin] = count
+			continue
+		}
+
+		counts[origin] += count
+	}
+
+	// check for an error
+	if result.Err() != nil {
+		return nil, fmt.Errorf("query parsing error: %s", result.Err().Error())
+	}
+
+	client.Close()
+	return counts, nil
+}
+
 func updateRelayCount(current api.RelayCounts, relayResult string, count int64) (api.RelayCounts, error) {
 	switch {
 	case relayResult == fmt.Sprintf("%d", http.StatusOK):
@@ -234,6 +302,7 @@ func (i *influxDB) AppRelays(from, to time.Time) (map[string]api.RelayCounts, er
 }
 
 // startOfDay returns the time matching the start of the day of the input.
+//
 //	timezone/location is maintained.
 func startOfDay(day time.Time) time.Time {
 	y, m, d := day.Date()
