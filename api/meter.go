@@ -35,6 +35,7 @@ type RelayMeter interface {
 	// LoadBalancerRelays returns the metrics for an Endpoint, AKA loadbalancer
 	LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
 	AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error)
+	AllClassification(from, to time.Time) ([]AllClassificationsResponse, error)
 }
 
 type RelayCounts struct {
@@ -48,6 +49,13 @@ type AppRelaysResponse struct {
 	From        time.Time
 	To          time.Time
 	Application string
+}
+
+type AllClassificationsResponse struct {
+	Count  RelayCounts
+	From   time.Time
+	To     time.Time
+	Origin string
 }
 
 type UserRelaysResponse struct {
@@ -83,6 +91,7 @@ type Backend interface {
 	//TODO: reverse map keys order, i.e. map[app]-> map[day]RelayCounts, at PG level
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error)
 	TodaysUsage() (map[string]RelayCounts, error)
+	TodaysOriginUsage() (map[string]RelayCounts, error)
 	// Is expected to return the list of applicationIDs owned by the user
 	UserApps(user string) ([]string, error)
 	// LoadBalancer returns the full load balancer struct
@@ -106,8 +115,9 @@ type relayMeter struct {
 	Backend
 	*logger.Logger
 
-	dailyUsage  map[time.Time]map[string]RelayCounts
-	todaysUsage map[string]RelayCounts
+	dailyUsage        map[time.Time]map[string]RelayCounts
+	todaysUsage       map[string]RelayCounts
+	todaysOriginUsage map[string]RelayCounts
 
 	dailyTTL  time.Time
 	todaysTTL time.Time
@@ -120,7 +130,7 @@ func (r *relayMeter) isEmpty() bool {
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	return len(r.dailyUsage) == 0 || len(r.todaysUsage) == 0
+	return len(r.dailyUsage) == 0 || len(r.todaysUsage) == 0 || len(r.todaysOriginUsage) == 0
 }
 
 // TODO: for now, today's data gets overwritten every time. If needed add todays metrics in intervals as they occur in the day
@@ -130,6 +140,7 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	now := time.Now()
 	var dailyUsage map[time.Time]map[string]RelayCounts
 	var todaysUsage map[string]RelayCounts
+	var todaysOriginUsage map[string]RelayCounts
 	var err error
 	noDataYet := r.isEmpty()
 
@@ -152,6 +163,13 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 			return err
 		}
 		r.Logger.WithFields(logger.Fields{"todays_metrics_count": len(todaysUsage)}).Info("Received todays metrics")
+
+		todaysOriginUsage, err = r.Backend.TodaysOriginUsage()
+		if err != nil {
+			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading todays origin usage data")
+			return err
+		}
+		r.Logger.WithFields(logger.Fields{"todays_origin_metrics_count": len(todaysOriginUsage)}).Info("Received todays metrics")
 	}
 
 	if !updateDaily && !updateToday {
@@ -171,6 +189,7 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	}
 	if updateToday {
 		r.todaysUsage = todaysUsage
+		r.todaysOriginUsage = todaysOriginUsage
 		d := r.RelayMeterOptions.TodaysMetricsTTL
 		if int(d.Seconds()) == 0 {
 			d = time.Duration(TTL_TODAYS_METRICS_DEFAULT_SECONDS) * time.Second
@@ -183,6 +202,7 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 // TODO: add a cache library, e.g. bigcache, if necessary (a cache library may not be needed, as we have a few thousand apps, for a maximum of 30 days)
 // Notes on To and From parameters:
 // Both parameters are assumed to be in the same timezone as the source of the data, i.e. influx
+//
 //	The From parameter is taken to mean the very start of the day that it specifies: the returned result includes all such relays
 func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysResponse, error) {
 	r.Logger.WithFields(logger.Fields{"app": app, "from": from, "to": to}).Info("apiserver: Received AppRelays request")
@@ -284,6 +304,46 @@ func (r *relayMeter) AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, err
 	}
 
 	resp := []AppRelaysResponse{}
+
+	for _, relResp := range rawResp {
+		resp = append(resp, relResp)
+	}
+
+	return resp, nil
+}
+
+func (r *relayMeter) AllClassification(from, to time.Time) ([]AllClassificationsResponse, error) {
+	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received classifications by origin request")
+
+	// TODO: enforce MaxArchiveAge on From parameter
+	// TODO: enforce Today as maximum value for To parameter
+	from, to, err := AdjustTimePeriod(from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get today's date in day-only format
+	now := time.Now()
+	_, today, _ := AdjustTimePeriod(now, now)
+
+	r.rwMutex.RLock()
+	defer r.rwMutex.RUnlock()
+
+	rawResp := map[string]AllClassificationsResponse{}
+
+	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
+	if today.Equal(to) || today.Before(to) {
+		for origin, count := range r.todaysOriginUsage {
+			rawResp[origin] = AllClassificationsResponse{
+				Origin: origin,
+				Count:  count,
+				From:   from,
+				To:     to,
+			}
+		}
+	}
+
+	resp := []AllClassificationsResponse{}
 
 	for _, relResp := range rawResp {
 		resp = append(resp, relResp)
@@ -556,7 +616,8 @@ func (r *relayMeter) AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerR
 }
 
 // Starts a data loader in a go routine, to periodically load data from the backend
-// 	context allows stopping the data loader
+//
+//	context allows stopping the data loader
 func (r *relayMeter) StartDataLoader(ctx context.Context) {
 	maxPastDays := maxArchiveAge(r.RelayMeterOptions.MaxPastDays)
 
@@ -596,8 +657,8 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 }
 
 // AdjustTimePeriod sets the two parameters, i.e. from and to, according to the following rules:
-//	- From is adjusted to the start of the day that it originally specifies
-//	- To is adjusted to the start of the next day from the day it originally specifies
+//   - From is adjusted to the start of the day that it originally specifies
+//   - To is adjusted to the start of the next day from the day it originally specifies
 func AdjustTimePeriod(from, to time.Time) (time.Time, time.Time, error) {
 
 	// TODO: refactor: there is some duplication in the function

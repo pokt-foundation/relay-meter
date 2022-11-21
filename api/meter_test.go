@@ -1049,10 +1049,11 @@ func TestStartDataLoader(t *testing.T) {
 }
 
 type fakeBackend struct {
-	usage       map[time.Time]map[string]RelayCounts
-	err         error
-	todaysUsage map[string]RelayCounts
-	userApps    map[string][]string
+	usage             map[time.Time]map[string]RelayCounts
+	err               error
+	todaysUsage       map[string]RelayCounts
+	todaysOriginUsage map[string]RelayCounts
+	userApps          map[string][]string
 
 	todaysMetricsCalls int
 	dailyMetricsCalls  int
@@ -1072,6 +1073,10 @@ func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[string]R
 func (f *fakeBackend) TodaysUsage() (map[string]RelayCounts, error) {
 	f.todaysMetricsCalls++
 	return f.todaysUsage, nil
+}
+
+func (f *fakeBackend) TodaysOriginUsage() (map[string]RelayCounts, error) {
+	return f.todaysOriginUsage, nil
 }
 
 func (f *fakeBackend) UserApps(user string) ([]string, error) {

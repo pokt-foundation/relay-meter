@@ -18,6 +18,8 @@ type Source interface {
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	// Returns application metrics for today so far
 	TodaysCounts() (map[string]api.RelayCounts, error)
+	// Returns relay counts for today grouped by origin
+	TodaysCountsPerOrigin() (map[string]int64, error)
 }
 
 type InfluxDBOptions struct {
@@ -184,7 +186,7 @@ func (i *influxDB) TodaysCountsPerOrigin() (map[string]int64, error) {
 		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "origin") +
 		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
 		fmt.Sprintf(" |> group(columns: [%q])", "origin") +
-		" |> agregateWindow(every: 24h, fn:mean, createEmpty: false)" +
+		" |> aggregateWindow(every: 24h, fn:mean, createEmpty: false)" +
 		fmt.Sprintf(" |> yield(name:%q)", "mean")
 
 	result, err := queryAPI.Query(context.Background(), query)
@@ -194,33 +196,19 @@ func (i *influxDB) TodaysCountsPerOrigin() (map[string]int64, error) {
 
 	// Iterate over query response
 	for result.Next() {
-		app, ok := result.Record().ValueByKey("origin").(string)
-		if !ok {
-			return nil, fmt.Errorf("Error parsing application public key: %v", result.Record().ValueByKey("applicationPublicKey"))
-		}
-		// TODO: log a warning on empty app key
-		if app == "" {
-			fmt.Println("Warning: empty application public key")
-			continue
-		}
-
-		// Remove leading and trailing '"' from app
-		app = strings.TrimPrefix(app, "\"")
-		app = strings.TrimSuffix(app, "\"")
-
 		origin, ok := result.Record().ValueByKey("origin").(string)
 		if !ok {
 			return nil, fmt.Errorf("Error parsing application origin: %v", result.Record().ValueByKey("origin"))
 		}
 		// TODO: log a warning on empty app key
 		if origin == "" {
-			fmt.Println("Warning: empty application origin")
+			fmt.Println("Warning: empty origin in relay")
 			continue
 		}
 
 		count, ok := result.Record().Value().(int64)
 		if !ok {
-			return nil, fmt.Errorf("Error parsing application %s relay counts %v", app, result.Record().Value())
+			return nil, fmt.Errorf("Error parsing origin %s relay counts %v", origin, result.Record().Value())
 		}
 
 		if counts[origin] == 0 {

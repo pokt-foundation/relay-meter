@@ -84,7 +84,7 @@ func handleTotalRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter
 
 func handleOriginClassification(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.TotalRelays(from, to)
+		return meter.AllClassification(from, to)
 	}
 	handleEndpoint(l, meterEndpoint, w, req)
 }
@@ -206,6 +206,11 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 		if allLbsRelaysPath.Match([]byte(req.URL.Path)) {
 			handleAllLoadBalancersRelays(meter, l, w, req)
+			return
+		}
+
+		if originClassificationPath.Match([]byte(req.URL.Path)) {
+			handleOriginClassification(meter, l, w, req)
 			return
 		}
 
