@@ -1,12 +1,14 @@
 name: docker
 
 on:
+  workflow_run:
+    workflows: ["Build & Test"]
+    branches: [main]
+    types:
+      - completed
   push:
-    branches:
-      - 'main'
-      - 'v*.*.*'
     tags:
-      - 'v*'
+      - '*'
   pull_request:
     branches:
       - 'main'
