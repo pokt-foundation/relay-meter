@@ -35,8 +35,3 @@ CREATE TABLE todays_app_sums (
   count_failure INT,
   count bigint NOT NULL
 );
-
-
- INSERT INTO todays_relay_counts(origin,application, count_success, count_failure,count) VALUES('dummy1','dummy1', 52, 32,84);
- INSERT INTO todays_relay_counts(origin,application, count_success, count_failure,count) VALUES('dummy2','dummy1', 63, 58,121);
- INSERT INTO todays_relay_counts(origin,application, count_success, count_failure,count) VALUES('dummy3','dummy1', 120, 250,370); 
