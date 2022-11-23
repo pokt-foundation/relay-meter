@@ -35,7 +35,7 @@ type RelayMeter interface {
 	// LoadBalancerRelays returns the metrics for an Endpoint, AKA loadbalancer
 	LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
 	AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error)
-	AllClassification(from, to time.Time) ([]AllClassificationsResponse, error)
+	RelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error)
 }
 
 type RelayCounts struct {
@@ -51,7 +51,7 @@ type AppRelaysResponse struct {
 	Application string
 }
 
-type AllClassificationsResponse struct {
+type OriginClassificationsResponse struct {
 	Count  RelayCounts
 	From   time.Time
 	To     time.Time
@@ -312,7 +312,7 @@ func (r *relayMeter) AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, err
 	return resp, nil
 }
 
-func (r *relayMeter) AllClassification(from, to time.Time) ([]AllClassificationsResponse, error) {
+func (r *relayMeter) RelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error) {
 	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received classifications by origin request")
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -329,12 +329,12 @@ func (r *relayMeter) AllClassification(from, to time.Time) ([]AllClassifications
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	rawResp := map[string]AllClassificationsResponse{}
+	rawResp := map[string]OriginClassificationsResponse{}
 
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
 		for origin, count := range r.todaysOriginUsage {
-			rawResp[origin] = AllClassificationsResponse{
+			rawResp[origin] = OriginClassificationsResponse{
 				Origin: origin,
 				Count:  count,
 				From:   from,
@@ -343,7 +343,7 @@ func (r *relayMeter) AllClassification(from, to time.Time) ([]AllClassifications
 		}
 	}
 
-	resp := []AllClassificationsResponse{}
+	resp := []OriginClassificationsResponse{}
 
 	for _, relResp := range rawResp {
 		resp = append(resp, relResp)

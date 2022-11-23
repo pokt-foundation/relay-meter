@@ -34,9 +34,9 @@ type Reporter interface {
 // Will be implemented by Postgres DB interface
 type Writer interface {
 	// TODO: rollover of entries
-	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]int64) error
+	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 	// WriteTodaysUsage writes todays relay counts to the underlying storage.
-	WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]int64) error
+	WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 	// Returns oldest and most recent timestamps for stored metrics
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
 }
@@ -133,7 +133,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 	return dailyUsage, nil
 }
 
-func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]int64) error {
+func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -175,10 +175,13 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	if countStr == "0" {
 		return time.Time{}, time.Time{}, nil
 	}
+	firstStr = strings.Replace(firstStr, "-04:00", "Z", 1)
 	first, err := parseDate(firstStr)
 	if err != nil {
 		return first, last, err
 	}
+
+	lastStr = strings.Replace(lastStr, "-04:00", "Z", 1)
 	last, err = parseDate(lastStr)
 	return first, last, err
 }
@@ -186,7 +189,7 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
 //
 //	All the entries in the table holding todays metrics are deleted first.
-func (p *pgClient) WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]int64) error {
+func (p *pgClient) WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -236,7 +239,7 @@ func WriteAppUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayC
 	return nil
 }
 
-func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]int64) error {
+func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts) error {
 	// todays_sums table gets rebuilt every time
 	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_relay_counts")
 	if deleteErr != nil {
@@ -249,8 +252,8 @@ func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]int64) 
 	// TODO: bulk insert
 	for origin, count := range counts {
 		_, execErr := tx.ExecContext(ctx,
-			"INSERT INTO todays_relay_counts(origin, count) VALUES($1, $2);",
-			origin, count)
+			"INSERT INTO todays_relay_counts(origin, count_success, count_failure) VALUES($1, $2, $3);",
+			origin, count.Success, count.Failure)
 		if execErr != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
 				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)

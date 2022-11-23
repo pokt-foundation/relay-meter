@@ -19,13 +19,13 @@ const (
 
 var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
-	appsRelaysPath           = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
-	allAppsRelaysPath        = regexp.MustCompile(`^/v0/relays/apps`)
-	usersRelaysPath          = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
-	lbRelaysPath             = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
-	allLbsRelaysPath         = regexp.MustCompile(`^/v0/relays/endpoints`)
-	totalRelaysPath          = regexp.MustCompile(`^/v0/relays`)
-	originClassificationPath = regexp.MustCompile(`^/v0/relays/origin-classification`)
+	appsRelaysPath    = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
+	allAppsRelaysPath = regexp.MustCompile(`^/v0/relays/apps`)
+	usersRelaysPath   = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
+	lbRelaysPath      = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
+	allLbsRelaysPath  = regexp.MustCompile(`^/v0/relays/endpoints`)
+	totalRelaysPath   = regexp.MustCompile(`^/v0/relays`)
+	originUsagePath   = regexp.MustCompile(`^/v0/relays/origin-classification`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -84,7 +84,7 @@ func handleTotalRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter
 
 func handleOriginClassification(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AllClassification(from, to)
+		return meter.RelaysOrigin(from, to)
 	}
 	handleEndpoint(l, meterEndpoint, w, req)
 }
@@ -209,7 +209,7 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 			return
 		}
 
-		if originClassificationPath.Match([]byte(req.URL.Path)) {
+		if originUsagePath.Match([]byte(req.URL.Path)) {
 			handleOriginClassification(meter, l, w, req)
 			return
 		}

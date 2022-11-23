@@ -18,7 +18,7 @@ const (
 type Source interface {
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	TodaysCounts() (map[string]api.RelayCounts, error)
-	TodaysCountsPerOrigin() (map[string]int64, error)
+	TodaysCountsPerOrigin() (map[string]api.RelayCounts, error)
 }
 
 type Writer interface {
@@ -27,8 +27,8 @@ type Writer interface {
 	//	It is assumed that there are no gaps in the returned time period.
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
 	// TODO: allow overwriting today's metrics
-	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]int64) error
-	WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]int64) error
+	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
+	WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 }
 
 type Collector interface {

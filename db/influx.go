@@ -19,7 +19,7 @@ type Source interface {
 	// Returns application metrics for today so far
 	TodaysCounts() (map[string]api.RelayCounts, error)
 	// Returns relay counts for today grouped by origin
-	TodaysCountsPerOrigin() (map[string]int64, error)
+	TodaysCountsPerOrigin() (map[string]api.RelayCounts, error)
 }
 
 type InfluxDBOptions struct {
@@ -175,19 +175,22 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	return counts, nil
 }
 
-func (i *influxDB) TodaysCountsPerOrigin() (map[string]int64, error) {
+func (i *influxDB) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI(i.Options.Org)
 
-	counts := make(map[string]int64)
+	counts := make(map[string]api.RelayCounts)
 	// TODO: send queries in parallel
-	query := fmt.Sprintf("from(bucket: %q)", i.Options.CurrentBucket) +
-		fmt.Sprintf(" |> range(start: %s,stop: %s)", startOfDay(time.Now()).Format(time.RFC3339), time.Now().Format(time.RFC3339)) +
-		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_measurement", "origin") +
-		fmt.Sprintf(" |> filter(fn: (r) => r[%q] == %q)", "_field", "count") +
-		fmt.Sprintf(" |> group(columns: [%q])", "origin") +
-		" |> aggregateWindow(every: 24h, fn:mean, createEmpty: false)" +
-		fmt.Sprintf(" |> yield(name:%q)", "mean")
+
+	queryString := `from(bucket: %q)
+	 |> range(start: %s,stop: %s)
+	 |> filter(fn: (r) => r["_measurement"] == "origin")
+	 |> filter(fn: (r) => r["_field"] == "count")
+	 |> keep(columns: ["origin","result","_value"])
+	 |> group(columns: ["origin","result"])
+	 |> sum()
+	`
+	query := fmt.Sprintf(queryString, i.Options.CurrentBucket, startOfDay(time.Now()).Format(time.RFC3339), time.Now().Format(time.RFC3339))
 
 	result, err := queryAPI.Query(context.Background(), query)
 	if err != nil {
@@ -211,12 +214,18 @@ func (i *influxDB) TodaysCountsPerOrigin() (map[string]int64, error) {
 			return nil, fmt.Errorf("Error parsing origin %s relay counts %v", origin, result.Record().Value())
 		}
 
-		if counts[origin] == 0 {
-			counts[origin] = count
-			continue
+		// TODO: log app + count + time
+		relayResult, ok := result.Record().ValueByKey("result").(string)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing relay result: %v", result.Record().ValueByKey("result"))
 		}
 
-		counts[origin] += count
+		updatedCount, err := updateRelayCountOrigin(counts[origin], relayResult, count)
+		if err != nil {
+			return nil, err
+		}
+
+		counts[origin] = updatedCount
 	}
 
 	// check for an error
@@ -232,6 +241,19 @@ func updateRelayCount(current api.RelayCounts, relayResult string, count int64) 
 	switch {
 	case relayResult == fmt.Sprintf("%d", http.StatusOK):
 		current.Success += int64(count)
+	case relayResult == fmt.Sprintf("%d", http.StatusInternalServerError):
+		current.Failure += int64(count)
+	default:
+		return api.RelayCounts{}, fmt.Errorf("Invalid value in result field: %s", relayResult)
+	}
+	return current, nil
+}
+
+func updateRelayCountOrigin(current api.RelayCounts, relayResult string, count int64) (api.RelayCounts, error) {
+	switch {
+	case relayResult == "_result":
+		current.Success += int64(count)
+	//TODO: Update the condition when relays fails after we define it
 	case relayResult == fmt.Sprintf("%d", http.StatusInternalServerError):
 		current.Failure += int64(count)
 	default:

@@ -1048,6 +1048,162 @@ func TestStartDataLoader(t *testing.T) {
 	}
 }
 
+func TestRelaysOrigin(t *testing.T) {
+	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
+	todaysUsage := fakeTodaysMetrics()
+
+	testCases := []struct {
+		name                string
+		from                time.Time
+		to                  time.Time
+		todaysOriginUsage   map[string]int64
+		expected            map[string]OriginClassificationsResponse
+		expectedErr         error
+		expectedTodaysCalls int
+	}{
+		{
+			name: "Only today's data is included when from and to parameters point to today",
+			from: now,
+			to:   now,
+			expected: map[string]OriginClassificationsResponse{
+				"app1": {
+					Origin: "app1",
+					From:   now,
+					To:     now.AddDate(0, 0, 1),
+					Count: RelayCounts{
+						Success: 50,
+						Failure: 40,
+					},
+				},
+				"app2": {
+					Origin: "app2",
+					From:   now,
+					To:     now.AddDate(0, 0, 1),
+					Count: RelayCounts{
+						Success: 30,
+						Failure: 70,
+					},
+				},
+				"app4": {
+					Origin: "app4",
+					From:   now,
+					To:     now.AddDate(0, 0, 1),
+					Count: RelayCounts{
+						Success: 500,
+						Failure: 700,
+					},
+				},
+			},
+		},
+		{
+			name: "Only today's metrics are included when the timespan only includes today",
+			from: time.Now(),
+			to:   time.Now().AddDate(0, 0, 2),
+			expected: map[string]OriginClassificationsResponse{
+				"app1": {
+					Origin: "app1",
+					From:   now,
+					To:     now.AddDate(0, 0, 3),
+					Count: RelayCounts{
+						Success: 50,
+						Failure: 40,
+					},
+				},
+				"app2": {
+					Origin: "app2",
+					From:   now,
+					To:     now.AddDate(0, 0, 3),
+					Count: RelayCounts{
+						Success: 30,
+						Failure: 70,
+					},
+				},
+				"app4": {
+					Origin: "app4",
+					From:   now,
+					To:     now.AddDate(0, 0, 3),
+					Count: RelayCounts{
+						Success: 500,
+						Failure: 700,
+					},
+				},
+			},
+		},
+		{
+			name: "Missing parameters' default values",
+			expected: map[string]OriginClassificationsResponse{
+				"app1": {
+					Origin: "app1",
+					From:   now.AddDate(0, 0, -30),
+					To:     now.AddDate(0, 0, 1),
+					Count: RelayCounts{
+						Success: 50,
+						Failure: 40,
+					},
+				},
+				"app2": {
+					Origin: "app2",
+					From:   now.AddDate(0, 0, -30),
+					To:     now.AddDate(0, 0, 1),
+					Count: RelayCounts{
+						Success: 30,
+						Failure: 70,
+					},
+				},
+				"app4": {
+					Origin: "app4",
+					From:   now.AddDate(0, 0, -30),
+					To:     now.AddDate(0, 0, 1),
+					Count: RelayCounts{
+						Success: 500,
+						Failure: 700,
+					},
+				},
+			},
+		},
+		{
+			name:        "Invalid timespan is rejected",
+			from:        now.AddDate(0, 0, -1),
+			to:          now.AddDate(0, 0, -2),
+			expectedErr: fmt.Errorf("Invalid timespan"),
+			expected:    map[string]OriginClassificationsResponse{},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fakeBackend := fakeBackend{
+				todaysOriginUsage: todaysUsage,
+			}
+
+			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			time.Sleep(200 * time.Millisecond)
+			rawGot, err := relayMeter.RelaysOrigin(tc.from, tc.to)
+			if err != nil {
+				if tc.expectedErr == nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+				if !strings.Contains(err.Error(), tc.expectedErr.Error()) {
+					t.Fatalf("Expected error to contain: %q, got: %v", tc.expectedErr.Error(), err)
+				}
+			}
+
+			// Need to convert it to map to be able to compare
+			got := make(map[string]OriginClassificationsResponse, len(rawGot))
+
+			for _, relResp := range rawGot {
+				got[relResp.Origin] = relResp
+			}
+
+			if diff := cmp.Diff(tc.expected, got); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 type fakeBackend struct {
 	usage             map[time.Time]map[string]RelayCounts
 	err               error

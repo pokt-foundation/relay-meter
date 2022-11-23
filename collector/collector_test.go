@@ -148,7 +148,7 @@ type fakeSource struct {
 	responseErr error
 
 	todaysCounts           map[string]api.RelayCounts
-	todaysCountsPerOrigin  map[string]int64
+	todaysCountsPerOrigin  map[string]api.RelayCounts
 	todaysMetricsCollected bool
 	dailyMetricsCollected  bool
 }
@@ -165,7 +165,7 @@ func (f *fakeSource) TodaysCounts() (map[string]api.RelayCounts, error) {
 	return f.todaysCounts, nil
 }
 
-func (f *fakeSource) TodaysCountsPerOrigin() (map[string]int64, error) {
+func (f *fakeSource) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error) {
 	f.todaysMetricsCollected = true
 	return f.todaysCountsPerOrigin, nil
 }
@@ -182,11 +182,11 @@ func (f *fakeWriter) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	return f.first, f.last, nil
 }
 
-func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]int64) error {
+func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
 	return nil
 }
 
-func (f *fakeWriter) WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]int64) error {
+func (f *fakeWriter) WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
 	f.todaysWrites++
 	return nil
 }
