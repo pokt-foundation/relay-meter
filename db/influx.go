@@ -253,7 +253,7 @@ func updateRelayCountOrigin(current api.RelayCounts, relayResult string, count i
 	switch {
 	case relayResult == "_result":
 		current.Success += int64(count)
-	//TODO: Update the condition when relays fails after we define it
+	// TODO: Update the condition when relays fails after we define it
 	case relayResult == fmt.Sprintf("%d", http.StatusInternalServerError):
 		current.Failure += int64(count)
 	default:

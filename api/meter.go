@@ -90,7 +90,7 @@ type RelayMeterOptions struct {
 }
 
 type Backend interface {
-	//TODO: reverse map keys order, i.e. map[app]-> map[day]RelayCounts, at PG level
+	// TODO: reverse map keys order, i.e. map[app]-> map[day]RelayCounts, at PG level
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error)
 	TodaysUsage() (map[string]RelayCounts, error)
 	TodaysOriginUsage() (map[string]RelayCounts, error)
