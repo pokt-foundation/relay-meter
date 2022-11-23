@@ -1048,7 +1048,7 @@ func TestStartDataLoader(t *testing.T) {
 	}
 }
 
-func TestRelaysOrigin(t *testing.T) {
+func TestAllRelaysOrigin(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
 	todaysUsage := fakeTodaysMetrics()
 
@@ -1180,7 +1180,7 @@ func TestRelaysOrigin(t *testing.T) {
 
 			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			rawGot, err := relayMeter.RelaysOrigin(tc.from, tc.to)
+			rawGot, err := relayMeter.AllRelaysOrigin(tc.from, tc.to)
 			if err != nil {
 				if tc.expectedErr == nil {
 					t.Fatalf("Unexpected error: %v", err)

@@ -539,10 +539,16 @@ func (f *fakeRelayMeter) AllLoadBalancersRelays(from, to time.Time) ([]LoadBalan
 	return f.allLoadBalancersResponse, f.responseErr
 }
 
-func (f *fakeRelayMeter) RelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error) {
+func (f *fakeRelayMeter) AllRelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.allClassificationsResponse, f.responseErr
+}
+
+func (f *fakeRelayMeter) RelaysOrigin(origin string, from, to time.Time) (OriginClassificationsResponse, error) {
+	f.requestedFrom = from
+	f.requestedTo = to
+	return f.allClassificationsResponse[0], f.responseErr
 }
 
 func TestTimePeriod(t *testing.T) {

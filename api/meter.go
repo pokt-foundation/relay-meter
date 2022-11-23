@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,7 +36,8 @@ type RelayMeter interface {
 	// LoadBalancerRelays returns the metrics for an Endpoint, AKA loadbalancer
 	LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
 	AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error)
-	RelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error)
+	AllRelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error)
+	RelaysOrigin(origin string, from, to time.Time) (OriginClassificationsResponse, error)
 }
 
 type RelayCounts struct {
@@ -312,7 +314,7 @@ func (r *relayMeter) AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, err
 	return resp, nil
 }
 
-func (r *relayMeter) RelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error) {
+func (r *relayMeter) AllRelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error) {
 	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received classifications by origin request")
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -347,6 +349,43 @@ func (r *relayMeter) RelaysOrigin(from, to time.Time) ([]OriginClassificationsRe
 
 	for _, relResp := range rawResp {
 		resp = append(resp, relResp)
+	}
+
+	return resp, nil
+}
+
+func (r *relayMeter) RelaysOrigin(origin string, from, to time.Time) (OriginClassificationsResponse, error) {
+	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received classifications by origin request")
+
+	// TODO: enforce MaxArchiveAge on From parameter
+	// TODO: enforce Today as maximum value for To parameter
+	from, to, err := AdjustTimePeriod(from, to)
+	if err != nil {
+		return OriginClassificationsResponse{}, err
+	}
+
+	// Get today's date in day-only format
+	now := time.Now()
+	_, today, _ := AdjustTimePeriod(now, now)
+
+	r.rwMutex.RLock()
+	defer r.rwMutex.RUnlock()
+
+	resp := OriginClassificationsResponse{}
+
+	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
+	if today.Equal(to) || today.Before(to) {
+		for curentOrigin, count := range r.todaysOriginUsage {
+			if strings.Contains(curentOrigin, origin) {
+				resp = OriginClassificationsResponse{
+					Origin: origin,
+					Count:  count,
+					To:     to,
+					From:   from,
+				}
+				break
+			}
+		}
 	}
 
 	return resp, nil
