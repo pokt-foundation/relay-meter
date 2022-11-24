@@ -155,6 +155,7 @@ type fakeSource struct {
 	responseErr error
 
 	todaysCounts           map[string]api.RelayCounts
+	todaysCountsPerOrigin  map[string]api.RelayCounts
 	todaysLatency          map[string][]api.Latency
 	todaysMetricsCollected bool
 	dailyMetricsCollected  bool
@@ -171,6 +172,11 @@ func (f *fakeSource) DailyCounts(from, to time.Time) (map[time.Time]map[string]a
 func (f *fakeSource) TodaysCounts() (map[string]api.RelayCounts, error) {
 	f.todaysMetricsCollected = true
 	return f.todaysCounts, nil
+}
+
+func (f *fakeSource) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error) {
+	f.todaysMetricsCollected = true
+	return f.todaysCountsPerOrigin, nil
 }
 
 func (f *fakeSource) TodaysLatency() (map[string][]api.Latency, error) {
@@ -191,12 +197,17 @@ func (f *fakeWriter) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	return f.first, f.last, nil
 }
 
-func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts) error {
+func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
 	return nil
 }
 
-func (f *fakeWriter) WriteTodaysMetrics(counts map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
+func (f *fakeWriter) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
 	f.todaysWrites++
 	f.todaysLatencyWrites++
+	return nil
+}
+
+func (f *fakeWriter) WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
+	f.todaysWrites++
 	return nil
 }

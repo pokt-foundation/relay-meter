@@ -18,6 +18,7 @@ const (
 type Source interface {
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	TodaysCounts() (map[string]api.RelayCounts, error)
+	TodaysCountsPerOrigin() (map[string]api.RelayCounts, error)
 	TodaysLatency() (map[string][]api.Latency, error)
 }
 
@@ -27,8 +28,9 @@ type Writer interface {
 	//	It is assumed that there are no gaps in the returned time period.
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
 	// TODO: allow overwriting today's metrics
-	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts) error
-	WriteTodaysMetrics(counts map[string]api.RelayCounts, latencies map[string][]api.Latency) error
+	WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error
+	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
+	WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 }
 
 type Collector interface {
@@ -42,6 +44,7 @@ type Collector interface {
 }
 
 // NewCollector returns a collector which will periodically (or on Collect being called)
+//
 //	gathers metrics from the source and writes to the writer.
 //	maxArchiveAge is the oldest time for which metrics are saved
 func NewCollector(source Source, writer Writer, maxArchiveAge time.Duration, log *logger.Logger) Collector {
@@ -61,6 +64,7 @@ type collector struct {
 }
 
 // Collects relay usage data from the source and uses the writer to store.
+//
 //	-
 func (c *collector) CollectDailyUsage(from, to time.Time) error {
 	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting daily metrics collection...")
@@ -76,7 +80,8 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 	}
 	c.Logger.WithFields(logger.Fields{"daily_metrics_count": len(counts), "from": from, "to": to}).Info("Collected daily metrics")
 
-	return c.Writer.WriteDailyUsage(counts)
+	// TODO: Add counts per origins
+	return c.Writer.WriteDailyUsage(counts, nil)
 }
 
 func (c *collector) collectTodaysUsage() error {
@@ -86,13 +91,19 @@ func (c *collector) collectTodaysUsage() error {
 	}
 	c.Logger.WithFields(logger.Fields{"todays_usage_count": len(todaysCounts)}).Info("Collected todays usage")
 
+	todaysRelaysInOrigin, err := c.Source.TodaysCountsPerOrigin()
+	if err != nil {
+		return err
+	}
+	c.Logger.WithFields(logger.Fields{"todays_metrics_count_per_origin": len(todaysRelaysInOrigin)}).Info("Collected todays metrics")
+
 	todaysLatency, err := c.Source.TodaysLatency()
 	if err != nil {
 		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily latencies")
 	}
 	c.Logger.WithFields(logger.Fields{"todays_latencies_count": len(todaysLatency)}).Info("Collected todays latencies")
 
-	return c.Writer.WriteTodaysMetrics(todaysCounts, todaysLatency)
+	return c.Writer.WriteTodaysMetrics(todaysCounts, todaysRelaysInOrigin, todaysLatency)
 }
 
 func (c *collector) collect() error {

@@ -31,15 +31,17 @@ type Reporter interface {
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	// TodaysUsage returns the metrics for today so far
 	TodaysUsage() (map[string]api.RelayCounts, error)
+	TodaysOriginUsage() (map[string]api.RelayCounts, error)
 	TodaysLatency() (map[string][]api.Latency, error)
 }
 
 // Will be implemented by Postgres DB interface
 type Writer interface {
 	// TODO: rollover of entries
-	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts) error
-	// WriteTodaysMetrics writes todays relay counts and latencies to the underlying storage.
-	WriteTodaysMetrics(counts map[string]api.RelayCounts, latencies map[string][]api.Latency) error
+	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
+	// WriteTodaysUsage writes todays relay counts to the underlying storage.
+	WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
+	WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error
 	// Returns oldest and most recent timestamps for stored metrics
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
 }
@@ -136,7 +138,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 	return dailyUsage, nil
 }
 
-func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts) error {
+func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -178,16 +180,19 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	if countStr == "0" {
 		return time.Time{}, time.Time{}, nil
 	}
+	firstStr = strings.Replace(firstStr, "-04:00", "Z", 1)
 	first, err := parseDate(firstStr)
 	if err != nil {
 		return first, last, err
 	}
+
+	lastStr = strings.Replace(lastStr, "-04:00", "Z", 1)
 	last, err = parseDate(lastStr)
 	return first, last, err
 }
 
-func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
-	err := p.writeTodaysUsage(counts)
+func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
+	err := p.WriteTodaysUsage(counts, countsOrigin)
 	if err != nil {
 		return fmt.Errorf("error writing usage: %s", err.Error())
 	}
@@ -201,8 +206,9 @@ func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, latenci
 }
 
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
+//
 //	All the entries in the table holding todays metrics are deleted first.
-func (p *pgClient) writeTodaysUsage(counts map[string]api.RelayCounts) error {
+func (p *pgClient) WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
 	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -210,6 +216,22 @@ func (p *pgClient) writeTodaysUsage(counts map[string]api.RelayCounts) error {
 		return err
 	}
 
+	if err = WriteAppUsage(ctx, tx, counts); err != nil {
+		return err
+	}
+
+	if err = WriteOriginUsage(ctx, tx, countsOrigin); err != nil {
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func WriteAppUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts) error {
 	// todays_sums table gets rebuilt every time
 	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_app_sums")
 	if deleteErr != nil {
@@ -233,9 +255,33 @@ func (p *pgClient) writeTodaysUsage(counts map[string]api.RelayCounts) error {
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return err
+	return nil
+}
+
+func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts) error {
+	// todays_sums table gets rebuilt every time
+	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_relay_counts")
+	if deleteErr != nil {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr)
+			return deleteErr
+		}
 	}
+
+	// TODO: bulk insert
+	for origin, count := range counts {
+		_, execErr := tx.ExecContext(ctx,
+			"INSERT INTO todays_relay_counts(origin, count_success, count_failure) VALUES($1, $2, $3);",
+			origin, count.Success, count.Failure)
+		if execErr != nil {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+				return execErr
+			}
+			fmt.Printf("update failed: %v", execErr)
+		}
+	}
+
 	return nil
 }
 
@@ -346,6 +392,7 @@ func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 	defer rows.Close()
 
 	todaysLatency := make(map[string][]api.Latency)
+
 	for rows.Next() {
 		var r string
 		if err := rows.Scan(&r); err != nil {
@@ -378,6 +425,7 @@ func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 		latencyByHour := api.Latency{Time: hourlyTime, Latency: numbers.RoundFloat(hourlyAverageLatency, 5)}
 
 		todaysLatency[app] = append(todaysLatency[app], latencyByHour)
+
 	}
 	// TODO: verify this is needed
 	if rerr := rows.Close(); rerr != nil {
@@ -389,6 +437,64 @@ func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 	}
 
 	return todaysLatency, nil
+}
+
+// TodaysUsage returns the current day's metrics so far.
+func (pg *pgClient) TodaysOriginUsage() (map[string]api.RelayCounts, error) {
+	// TODO: factor-out the SQL statements
+	ctx := context.Background()
+	rows, err := pg.DB.QueryContext(ctx, "SELECT (origin, count_success, count_failure) FROM todays_relay_counts")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	todaysUsage := make(map[string]api.RelayCounts)
+
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return nil, err
+		}
+
+		// Example of query output:
+		// (46d4474f0a60f062103b1867c7edac323e58f416e7458f436623b9d96eb44b37,18931)
+		r = strings.ReplaceAll(r, "\"", "")
+		r = strings.TrimPrefix(r, "(")
+		r = strings.TrimSuffix(r, ")")
+		items := strings.Split(r, ",")
+		if len(items) != 3 {
+			return nil, fmt.Errorf("Invalid format in query output: %s", r)
+		}
+
+		count_success, err := strconv.ParseInt(items[1], 10, 64) // bitsize 64 for int64 return
+		if err != nil {
+			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[1], r, err)
+		}
+		count_failure, err := strconv.ParseInt(items[2], 10, 64) // bitsize 64 for int64 return
+		if err != nil {
+			return nil, fmt.Errorf("Invalid total relays format: %s in query result line: %s, error: %v", items[2], r, err)
+		}
+		origin := items[0]
+		if origin == "" {
+			return nil, fmt.Errorf("Empty origin, in query result line: %s", r)
+		}
+
+		todaysUsage[origin] = api.RelayCounts{
+			Success: count_success,
+			Failure: count_failure,
+		}
+	}
+	// TODO: verify this is needed
+	if rerr := rows.Close(); rerr != nil {
+		return nil, rerr
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return todaysUsage, nil
 }
 
 func parseDate(source string) (time.Time, error) {

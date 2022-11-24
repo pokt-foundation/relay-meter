@@ -19,6 +19,8 @@ type Source interface {
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	// Returns application metrics for today so far
 	TodaysCounts() (map[string]api.RelayCounts, error)
+	// Returns relay counts for today grouped by origin
+	TodaysCountsPerOrigin() (map[string]api.RelayCounts, error)
 	TodaysLatency() (map[string][]api.Latency, error)
 }
 
@@ -41,6 +43,7 @@ type influxDB struct {
 }
 
 // DailyCounts Returns total of number of daily relays per application, up to and including the specified day
+//
 //	Each app will have an entry per day
 func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error) {
 	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
@@ -176,6 +179,68 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	return counts, nil
 }
 
+func (i *influxDB) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error) {
+	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
+	queryAPI := client.QueryAPI(i.Options.Org)
+
+	counts := make(map[string]api.RelayCounts)
+	// TODO: send queries in parallel
+
+	queryString := `from(bucket: %q)
+	 |> range(start: %s,stop: %s)
+	 |> filter(fn: (r) => r["_measurement"] == "origin")
+	 |> filter(fn: (r) => r["_field"] == "count")
+	 |> keep(columns: ["origin","result","_value"])
+	 |> group(columns: ["origin","result"])
+	 |> sum()
+	`
+	query := fmt.Sprintf(queryString, i.Options.CurrentBucket, startOfDay(time.Now()).Format(time.RFC3339), time.Now().Format(time.RFC3339))
+
+	result, err := queryAPI.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	// Iterate over query response
+	for result.Next() {
+		origin, ok := result.Record().ValueByKey("origin").(string)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing application origin: %v", result.Record().ValueByKey("origin"))
+		}
+		// TODO: log a warning on empty app key
+		if origin == "" {
+			fmt.Println("Warning: empty origin in relay")
+			continue
+		}
+
+		count, ok := result.Record().Value().(int64)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing origin %s relay counts %v", origin, result.Record().Value())
+		}
+
+		// TODO: log app + count + time
+		relayResult, ok := result.Record().ValueByKey("result").(string)
+		if !ok {
+			return nil, fmt.Errorf("Error parsing relay result: %v", result.Record().ValueByKey("result"))
+		}
+
+		updatedCount, err := updateRelayCountOrigin(counts[origin], relayResult, count)
+		if err != nil {
+			return nil, err
+		}
+
+		counts[origin] = updatedCount
+	}
+
+	// check for an error
+	if result.Err() != nil {
+		return nil, fmt.Errorf("query parsing error: %s", result.Err().Error())
+	}
+
+	client.Close()
+	return counts, nil
+}
+
 // Fetches the last 24 hours of latency data from InfluxDB, sorted by applicationPublicKey
 // and broken up into hourly average latency (returned slice will be exactly 24 items)
 func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
@@ -259,6 +324,19 @@ func updateRelayCount(current api.RelayCounts, relayResult string, count int64) 
 	return current, nil
 }
 
+func updateRelayCountOrigin(current api.RelayCounts, relayResult string, count int64) (api.RelayCounts, error) {
+	switch {
+	case relayResult == "_result":
+		current.Success += int64(count)
+	// TODO: Update the condition when relays fails after we define it
+	case relayResult == fmt.Sprintf("%d", http.StatusInternalServerError):
+		current.Failure += int64(count)
+	default:
+		return api.RelayCounts{}, fmt.Errorf("Invalid value in result field: %s", relayResult)
+	}
+	return current, nil
+}
+
 // TODO: Remove this and all references.
 func (i *influxDB) AppRelays(from, to time.Time) (map[string]api.RelayCounts, error) {
 	// Create a new client using an InfluxDB server base URL and an authentication token
@@ -309,6 +387,7 @@ func (i *influxDB) AppRelays(from, to time.Time) (map[string]api.RelayCounts, er
 }
 
 // startOfDay returns the time matching the start of the day of the input.
+//
 //	timezone/location is maintained.
 func startOfDay(day time.Time) time.Time {
 	y, m, d := day.Date()
