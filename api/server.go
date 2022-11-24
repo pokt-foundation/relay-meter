@@ -19,12 +19,14 @@ const (
 
 var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
-	appsRelaysPath    = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
-	allAppsRelaysPath = regexp.MustCompile(`^/v0/relays/apps`)
-	usersRelaysPath   = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
-	lbRelaysPath      = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
-	allLbsRelaysPath  = regexp.MustCompile(`^/v0/relays/endpoints`)
-	totalRelaysPath   = regexp.MustCompile(`^/v0/relays`)
+	appsRelaysPath          = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
+	allAppsRelaysPath       = regexp.MustCompile(`^/v0/relays/apps`)
+	usersRelaysPath         = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
+	lbRelaysPath            = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
+	allLbsRelaysPath        = regexp.MustCompile(`^/v0/relays/endpoints`)
+	totalRelaysPath         = regexp.MustCompile(`^/v0/relays`)
+	originUsagePath         = regexp.MustCompile(`^/v0/relays/origin-classification`)
+	specificOriginUsagePath = regexp.MustCompile(`^/v0/relays/origin-classification/([[:alnum:]].*)`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -77,6 +79,20 @@ func handleAllLoadBalancersRelays(meter RelayMeter, l *logger.Logger, w http.Res
 func handleTotalRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.TotalRelays(from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleOriginClassification(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.AllRelaysOrigin(from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleSpecificOriginClassification(meter RelayMeter, l *logger.Logger, origin string, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.RelaysOrigin(origin, from, to)
 	}
 	handleEndpoint(l, meterEndpoint, w, req)
 }
@@ -198,6 +214,16 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 		if allLbsRelaysPath.Match([]byte(req.URL.Path)) {
 			handleAllLoadBalancersRelays(meter, l, w, req)
+			return
+		}
+
+		if origin := match(specificOriginUsagePath, req.URL.Path); origin != "" {
+			handleSpecificOriginClassification(meter, l, origin, w, req)
+			return
+		}
+
+		if originUsagePath.Match([]byte(req.URL.Path)) {
+			handleOriginClassification(meter, l, w, req)
 			return
 		}
 

@@ -68,6 +68,14 @@ func TestGetHttpServer(t *testing.T) {
 			url:                "http://relay-meter.pokt.network/invalid-path",
 			expectedStatusCode: http.StatusBadRequest,
 		},
+		{
+			name: "Origin usage path is handled correctly",
+			url: fmt.Sprint("http://relay-meter.pokt.network/v0/relays/origin-classification",
+				url.QueryEscape(now.Format(time.RFC3339)),
+				url.QueryEscape(now.Format(time.RFC3339)),
+			),
+			expectedStatusCode: http.StatusOK,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -492,6 +500,7 @@ type fakeRelayMeter struct {
 	allResponse                []AppRelaysResponse
 	loadbalancerRelaysResponse LoadBalancerRelaysResponse
 	allLoadBalancersResponse   []LoadBalancerRelaysResponse
+	allClassificationsResponse []OriginClassificationsResponse
 	responseErr                error
 }
 
@@ -528,6 +537,18 @@ func (f *fakeRelayMeter) AllLoadBalancersRelays(from, to time.Time) ([]LoadBalan
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.allLoadBalancersResponse, f.responseErr
+}
+
+func (f *fakeRelayMeter) AllRelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error) {
+	f.requestedFrom = from
+	f.requestedTo = to
+	return f.allClassificationsResponse, f.responseErr
+}
+
+func (f *fakeRelayMeter) RelaysOrigin(origin string, from, to time.Time) (OriginClassificationsResponse, error) {
+	f.requestedFrom = from
+	f.requestedTo = to
+	return f.allClassificationsResponse[0], f.responseErr
 }
 
 func TestTimePeriod(t *testing.T) {
