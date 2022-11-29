@@ -25,8 +25,7 @@ services:
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: my-super-secret-auth-token
   # TODO: have the import script (on a simple alpine image) extract the zipped data (or some other way of importing)
   influx_importer:
-    build:
-      ./db-importer
+    build: ./db-importer
     depends_on:
       - "db"
     volumes:
@@ -39,6 +38,8 @@ services:
       INFLUXDB_ORG: "my-org"
       INFLUXDB_BUCKET_DAILY: "mainnetRelayApp1d"
       INFLUXDB_BUCKET_CURRENT: "mainnetRelayApp10m"
+      INFLUXDB_ORIGIN_BUCKET_DAILY: "mainnetOrigin1d"
+      INFLUXDB_ORIGIN_BUCKET_CURRENT: "mainnetOrigin60m"
       INFLUXDB_HEALTH_ENDPOINT: "http://db:8086/health"
       STATUS_FILE: "/status/influxImportDone"
   # postgres used as backend database to store metric summaries
@@ -54,8 +55,7 @@ services:
       POSTGRES_PASSWORD: my-password
       POSTGRES_DB: relaysummary
   pg_setup:
-    build:
-      ./postgres_setup
+    build: ./postgres_setup
     depends_on:
       - "pg"
     volumes:
@@ -79,6 +79,8 @@ services:
       INFLUXDB_ORG: "my-org"
       INFLUXDB_BUCKET_DAILY: "mainnetRelayApp1d"
       INFLUXDB_BUCKET_CURRENT: "mainnetRelayApp10m"
+      INFLUXDB_ORIGIN_BUCKET_DAILY: "mainnetOrigin1d"
+      INFLUXDB_ORIGIN_BUCKET_CURRENT: "mainnetOrigin60m"
       INFLUX_HEALTH_ENDPOINT: "http://db:8086/health"
       POSTGRES_HOST: pg
       POSTGRES_PORT: 5432
@@ -91,7 +93,7 @@ services:
       # Collector options
       COLLECTION_INTERVAL_SECONDS: 30
       ENV_REPORT_INTERVAL_SECONDS: 10
-    # volumes:
+      # volumes:
       # not needed: the Dockerfile.collector will pull the github repo (@version) and build it.
       # - ./:/go/src/github.com/pokt-foundation/relay-meter/tests/e2e
       # - ./scripts:/scripts
