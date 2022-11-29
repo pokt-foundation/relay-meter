@@ -162,6 +162,7 @@ func (b *backendProvider) LoadBalancers() ([]*repository.LoadBalancer, error) {
 // TODO: need a /health endpoint
 func main() {
 	log := logger.New()
+	log.Formatter = &logger.JSONFormatter{}
 
 	options := gatherOptions()
 

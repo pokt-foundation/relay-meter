@@ -30,6 +30,10 @@ type InfluxDBOptions struct {
 	DailyBucket string
 	// Bucket to query for today's counts
 	CurrentBucket string
+	// Bucket to query for previous days counts per origin
+	DailyOriginBucket string
+	// Bucket to query for today's counts per origin
+	CurrentOriginBucket string
 }
 
 func NewInfluxDBSource(options InfluxDBOptions) Source {
@@ -190,7 +194,7 @@ func (i *influxDB) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error) {
 	 |> group(columns: ["origin","result"])
 	 |> sum()
 	`
-	query := fmt.Sprintf(queryString, i.Options.CurrentBucket, startOfDay(time.Now()).Format(time.RFC3339), time.Now().Format(time.RFC3339))
+	query := fmt.Sprintf(queryString, i.Options.CurrentOriginBucket, startOfDay(time.Now()).Format(time.RFC3339), time.Now().Format(time.RFC3339))
 
 	result, err := queryAPI.Query(context.Background(), query)
 	if err != nil {

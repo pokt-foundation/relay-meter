@@ -53,6 +53,9 @@ func main() {
 	options := gatherOptions()
 
 	fmt.Printf("Starting the collector...")
-	collector := collector.NewCollector(influxClient, pgClient, time.Duration(options.maxArchiveAgeDays)*24*time.Hour, logger.New())
+	log := logger.New()
+	log.Formatter = &logger.JSONFormatter{}
+
+	collector := collector.NewCollector(influxClient, pgClient, time.Duration(options.maxArchiveAgeDays)*24*time.Hour, log)
 	collector.Start(context.Background(), options.collectionInterval, options.reportingInterval)
 }
