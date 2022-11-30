@@ -307,18 +307,20 @@ func (r *relayMeter) AllAppsLatencies() ([]AppLatencyResponse, error) {
 	resp := []AppLatencyResponse{}
 
 	for app, appLatency := range r.todaysLatency {
-		sort.Slice(appLatency, func(i, j int) bool {
-			return appLatency[i].Time.Before(appLatency[j].Time)
-		})
+		if len(appLatency) > 0 {
+			sort.Slice(appLatency, func(i, j int) bool {
+				return appLatency[i].Time.Before(appLatency[j].Time)
+			})
 
-		latencyResp := AppLatencyResponse{
-			Application:  app,
-			DailyLatency: appLatency,
-			From:         appLatency[0].Time,
-			To:           appLatency[len(appLatency)-1].Time,
+			latencyResp := AppLatencyResponse{
+				Application:  app,
+				DailyLatency: appLatency,
+				From:         appLatency[0].Time,
+				To:           appLatency[len(appLatency)-1].Time,
+			}
+
+			resp = append(resp, latencyResp)
 		}
-
-		resp = append(resp, latencyResp)
 	}
 
 	return resp, nil

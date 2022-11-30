@@ -738,7 +738,6 @@ func TestAppLatency(t *testing.T) {
 	testCases := []struct {
 		name                string
 		requestedApp        string
-		todaysLatency       map[string][]Latency
 		expected            AppLatencyResponse
 		backendErr          error
 		expectedErr         error
@@ -795,7 +794,7 @@ func TestAppLatency(t *testing.T) {
 	}
 }
 
-func TestAllAppsLatency(t *testing.T) {
+func TestAllAppsLatencies(t *testing.T) {
 	todaysLatency := fakeTodaysLatency()
 	errBackendFailure := errors.New("backend error")
 
@@ -803,6 +802,7 @@ func TestAllAppsLatency(t *testing.T) {
 		name                string
 		todaysLatency       map[string][]Latency
 		expected            map[string]AppLatencyResponse
+		emptyLatencySlice   bool
 		expectedErr         error
 		backendErr          error
 		expectedTodaysCalls int
@@ -836,12 +836,24 @@ func TestAllAppsLatency(t *testing.T) {
 			expectedErr: errBackendFailure,
 			expected:    map[string]AppLatencyResponse{},
 		},
+		{
+			name:              "Empty latency response",
+			backendErr:        nil,
+			expectedErr:       nil,
+			emptyLatencySlice: true,
+			expected:          map[string]AppLatencyResponse{},
+		},
 	}
 
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+			if tc.emptyLatencySlice == true {
+				for key := range todaysLatency {
+					todaysLatency[key] = []Latency{}
+				}
+			}
+
 			fakeBackend := fakeBackend{
 				todaysLatency: todaysLatency,
 				err:           tc.backendErr,
@@ -850,6 +862,7 @@ func TestAllAppsLatency(t *testing.T) {
 			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			rawGot, err := relayMeter.AllAppsLatencies()
+
 			if err != nil {
 				if tc.expectedErr == nil {
 					t.Fatalf("Unexpected error: %v", err)
