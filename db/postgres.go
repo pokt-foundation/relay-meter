@@ -20,7 +20,7 @@ import (
 
 // TODO: db package needs some form of unit testing
 const (
-	pgTimeFormat   = "2006-01-02 15:04:00Z"
+	pgTimeFormat   = "2006-01-02 15:04:00+00"
 	dayLayout      = "2006-01-02"
 	tableDailySums = "daily_app_sums"
 )
@@ -102,6 +102,11 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 		items := strings.Split(r, ",")
 		if len(items) != 4 {
 			return nil, fmt.Errorf("Invalid format in query output: %s", r)
+		}
+
+		// TODO: remove this after we get a better way to ensure that the layout will match in different timezones
+		if !strings.HasSuffix(items[0], "+00") {
+			items[0] = items[0][:len(items[0])-3] + "+00"
 		}
 
 		ts, err := time.Parse(pgTimeFormat, items[0])
@@ -286,6 +291,7 @@ func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.Rel
 }
 
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
+//
 //	All the entries in the table holding todays metrics are deleted first.
 func (p *pgClient) writeTodaysLatency(latencies map[string][]api.Latency) error {
 	ctx := context.Background()
@@ -407,6 +413,11 @@ func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 		items := strings.Split(r, ",")
 		if len(items) != 3 {
 			return nil, fmt.Errorf("Invalid format in query output: %s", r)
+		}
+
+		// TODO: remove this after we get a better way to ensure that the layout will match in different timezones
+		if !strings.HasSuffix(items[1], "+00") {
+			items[1] = items[1][:len(items[1])-3] + "+00"
 		}
 
 		hourlyTime, err := time.Parse(pgTimeFormat, items[1])
