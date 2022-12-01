@@ -40,7 +40,7 @@ type Writer interface {
 	// TODO: rollover of entries
 	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 	// WriteTodaysUsage writes todays relay counts to the underlying storage.
-	WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
+	WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 	WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error
 	// Returns oldest and most recent timestamps for stored metrics
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
@@ -199,14 +199,25 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 }
 
 func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
-	err := p.WriteTodaysUsage(counts, countsOrigin)
+	ctx := context.Background()
+	// TODO: determine required isolation level
+	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+
+	err = p.writeTodaysLatency(ctx, tx, latencies)
+	if err != nil {
+		return fmt.Errorf("error writing latency: %s", err.Error())
+	}
+
+	err = p.WriteTodaysUsage(ctx, tx, counts, countsOrigin)
 	if err != nil {
 		return fmt.Errorf("error writing usage: %s", err.Error())
 	}
 
-	err = p.writeTodaysLatency(latencies)
-	if err != nil {
-		return fmt.Errorf("error writing latency: %s", err.Error())
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 
 	return nil
@@ -215,23 +226,12 @@ func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsO
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
 //
 //	All the entries in the table holding todays metrics are deleted first.
-func (p *pgClient) WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
-	ctx := context.Background()
-	// TODO: determine required isolation level
-	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
+func (p *pgClient) WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
+	if err := WriteAppUsage(ctx, tx, counts); err != nil {
 		return err
 	}
 
-	if err = WriteAppUsage(ctx, tx, counts); err != nil {
-		return err
-	}
-
-	if err = WriteOriginUsage(ctx, tx, countsOrigin); err != nil {
-		return err
-	}
-
-	if err = tx.Commit(); err != nil {
+	if err := WriteOriginUsage(ctx, tx, countsOrigin); err != nil {
 		return err
 	}
 
@@ -295,14 +295,7 @@ func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.Rel
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
 //
 //	All the entries in the table holding todays metrics are deleted first.
-func (p *pgClient) writeTodaysLatency(latencies map[string][]api.Latency) error {
-	ctx := context.Background()
-	// TODO: determine required isolation level
-	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return err
-	}
-
+func (p *pgClient) writeTodaysLatency(ctx context.Context, tx *sql.Tx, latencies map[string][]api.Latency) error {
 	// todays_app_latencies table gets rebuilt every time
 	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_app_latencies")
 	if deleteErr != nil {
@@ -329,9 +322,6 @@ func (p *pgClient) writeTodaysLatency(latencies map[string][]api.Latency) error 
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
 	return nil
 }
 
