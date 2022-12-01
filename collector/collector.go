@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -30,7 +31,7 @@ type Writer interface {
 	// TODO: allow overwriting today's metrics
 	WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error
 	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
-	WriteTodaysUsage(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
+	WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 }
 
 type Collector interface {
