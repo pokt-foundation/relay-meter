@@ -105,6 +105,9 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 		}
 
 		// TODO: remove this after we get a better way to ensure that the layout will match in different timezones
+		if strings.HasSuffix(items[0], "Z") {
+			items[0] = items[0][:len(items[0])-1] + "+00"
+		}
 		if !strings.HasSuffix(items[0], "+00") {
 			items[0] = items[0][:len(items[0])-3] + "+00"
 		}
@@ -416,6 +419,9 @@ func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 		}
 
 		// TODO: remove this after we get a better way to ensure that the layout will match in different timezones
+		if strings.HasSuffix(items[1], "Z") {
+			items[1] = items[1][:len(items[1])-1] + "+00"
+		}
 		if !strings.HasSuffix(items[1], "+00") {
 			items[1] = items[1][:len(items[1])-3] + "+00"
 		}
