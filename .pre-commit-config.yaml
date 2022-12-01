@@ -15,5 +15,5 @@ repos:
       # TODO: re-enable `golangci-lint` and fix all linter errors before re-committing
       # - id: golangci-lint
       - id: go-critic
-      - id: go-build
+      # - id: go-build
       - id: go-mod-tidy

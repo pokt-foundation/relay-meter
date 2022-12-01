@@ -1,3 +1,7 @@
+build:
+	CGO_ENABLED=0 GOOS=linux go build -a -o bin/collector ./cmd/collector/main.go
+	CGO_ENABLED=0 GOOS=linux go build -a -o bin/apiserver ./cmd/apiserver/main.go
+
 test:
 	go test ./... -count=1
 

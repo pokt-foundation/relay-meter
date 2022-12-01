@@ -76,6 +76,8 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Daily metrics collection period adjusted.")
 
 	counts, err := c.Source.DailyCounts(from, to)
+
+	fmt.Println("DAILY COUNT HERE~~~", counts)
 	if err != nil {
 		return err
 	}

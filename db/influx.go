@@ -72,6 +72,8 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api
 		  |> keep(columns: ["applicationPublicKey", "result", "_value"])`
 		fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, current.Format(time.RFC3339), current.AddDate(0, 0, 1).Format(time.RFC3339))
 
+		fmt.Println("QUERY IS HERE", fluxQuery)
+
 		result, err := queryAPI.Query(context.Background(), fluxQuery)
 		if err != nil {
 			return nil, err
