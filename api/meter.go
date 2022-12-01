@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ const (
 
 var (
 	ErrLoadBalancerNotFound = errors.New("loadbalancer/endpoint not found")
+	ErrAppLatencyNotFound   = errors.New("app latency not found")
 )
 
 type RelayMeter interface {
@@ -36,6 +38,8 @@ type RelayMeter interface {
 	// LoadBalancerRelays returns the metrics for an Endpoint, AKA loadbalancer
 	LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
 	AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error)
+	AppLatency(app string) (AppLatencyResponse, error)
+	AllAppsLatencies() ([]AppLatencyResponse, error)
 	AllRelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error)
 	RelaysOrigin(origin string, from, to time.Time) (OriginClassificationsResponse, error)
 }
@@ -45,12 +49,24 @@ type RelayCounts struct {
 	Failure int64
 }
 
+type Latency struct {
+	Time    time.Time
+	Latency float64
+}
+
 // TODO: refactor common fields
 type AppRelaysResponse struct {
 	Count       RelayCounts
 	From        time.Time
 	To          time.Time
 	Application string
+}
+
+type AppLatencyResponse struct {
+	DailyLatency []Latency
+	From         time.Time
+	To           time.Time
+	Application  string
 }
 
 type OriginClassificationsResponse struct {
@@ -93,6 +109,7 @@ type Backend interface {
 	// TODO: reverse map keys order, i.e. map[app]-> map[day]RelayCounts, at PG level
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error)
 	TodaysUsage() (map[string]RelayCounts, error)
+	TodaysLatency() (map[string][]Latency, error)
 	TodaysOriginUsage() (map[string]RelayCounts, error)
 	// Is expected to return the list of applicationIDs owned by the user
 	UserApps(user string) ([]string, error)
@@ -120,6 +137,7 @@ type relayMeter struct {
 	dailyUsage        map[time.Time]map[string]RelayCounts
 	todaysUsage       map[string]RelayCounts
 	todaysOriginUsage map[string]RelayCounts
+	todaysLatency     map[string][]Latency
 
 	dailyTTL  time.Time
 	todaysTTL time.Time
@@ -132,7 +150,7 @@ func (r *relayMeter) isEmpty() bool {
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	return len(r.dailyUsage) == 0 || len(r.todaysUsage) == 0 || len(r.todaysOriginUsage) == 0
+	return len(r.dailyUsage) == 0 || len(r.todaysUsage) == 0 || len(r.todaysOriginUsage) == 0 || len(r.todaysLatency) == 0
 }
 
 // TODO: for now, today's data gets overwritten every time. If needed add todays metrics in intervals as they occur in the day
@@ -143,6 +161,7 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	var dailyUsage map[time.Time]map[string]RelayCounts
 	var todaysUsage map[string]RelayCounts
 	var todaysOriginUsage map[string]RelayCounts
+	var todaysLatency map[string][]Latency
 	var err error
 	noDataYet := r.isEmpty()
 
@@ -164,6 +183,11 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading todays usage data")
 			return err
 		}
+
+		todaysLatency, err = r.Backend.TodaysLatency()
+		if err != nil {
+			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading todays latency data")
+		}
 		r.Logger.WithFields(logger.Fields{"todays_metrics_count": len(todaysUsage)}).Info("Received todays metrics")
 
 		todaysOriginUsage, err = r.Backend.TodaysOriginUsage()
@@ -183,19 +207,25 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 
 	if updateDaily {
 		r.dailyUsage = dailyUsage
+
 		d := r.RelayMeterOptions.DailyMetricsTTL
 		if int(d.Seconds()) == 0 {
 			d = time.Duration(TTL_DAILY_METRICS_DEFAULT_SECONDS) * time.Second
 		}
+
 		r.dailyTTL = time.Now().Add(d)
 	}
+
 	if updateToday {
 		r.todaysUsage = todaysUsage
 		r.todaysOriginUsage = todaysOriginUsage
+		r.todaysLatency = todaysLatency
+
 		d := r.RelayMeterOptions.TodaysMetricsTTL
 		if int(d.Seconds()) == 0 {
 			d = time.Duration(TTL_TODAYS_METRICS_DEFAULT_SECONDS) * time.Second
 		}
+
 		r.todaysTTL = time.Now().Add(d)
 	}
 	return nil
@@ -246,6 +276,52 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 	resp.Count = total
 	resp.From = from
 	resp.To = to
+
+	return resp, nil
+}
+
+func (r *relayMeter) AppLatency(app string) (AppLatencyResponse, error) {
+	r.Logger.WithFields(logger.Fields{"app": app}).Info("apiserver: Received AppLatency request")
+
+	appLatency := r.todaysLatency[app]
+
+	if len(appLatency) == 0 {
+		return AppLatencyResponse{}, ErrAppLatencyNotFound
+	}
+
+	sort.Slice(appLatency, func(i, j int) bool {
+		return appLatency[i].Time.Before(appLatency[j].Time)
+	})
+
+	return AppLatencyResponse{
+		Application:  app,
+		DailyLatency: appLatency,
+		From:         appLatency[0].Time,
+		To:           appLatency[len(appLatency)-1].Time,
+	}, nil
+}
+
+func (r *relayMeter) AllAppsLatencies() ([]AppLatencyResponse, error) {
+	r.Logger.Info("apiserver: Received AllAppsLatencies request")
+
+	resp := []AppLatencyResponse{}
+
+	for app, appLatency := range r.todaysLatency {
+		if len(appLatency) > 0 {
+			sort.Slice(appLatency, func(i, j int) bool {
+				return appLatency[i].Time.Before(appLatency[j].Time)
+			})
+
+			latencyResp := AppLatencyResponse{
+				Application:  app,
+				DailyLatency: appLatency,
+				From:         appLatency[0].Time,
+				To:           appLatency[len(appLatency)-1].Time,
+			}
+
+			resp = append(resp, latencyResp)
+		}
+	}
 
 	return resp, nil
 }
@@ -667,7 +743,9 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
 			return
 		}
+
 		r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting data loader...")
+
 		if err := r.loadData(from, to); err != nil {
 			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
 		}
@@ -675,8 +753,10 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 
 	r.Logger.WithFields(logger.Fields{"maxArchiveAge": maxPastDays}).Info("Running initial data loader iteration...")
 	load(maxPastDays)
+
 	go func(maxDays time.Duration) {
 		ticker := time.NewTicker(r.RelayMeterOptions.LoadInterval)
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -699,7 +779,6 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 //   - From is adjusted to the start of the day that it originally specifies
 //   - To is adjusted to the start of the next day from the day it originally specifies
 func AdjustTimePeriod(from, to time.Time) (time.Time, time.Time, error) {
-
 	// TODO: refactor: there is some duplication in the function
 	getDefault := func(parameter time.Time, defaultValue time.Time) (time.Time, error) {
 		if parameter.Equal(time.Time{}) {

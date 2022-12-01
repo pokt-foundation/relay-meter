@@ -12,6 +12,7 @@ import (
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/pokt-foundation/portal-api-go/repository"
+	"github.com/pokt-foundation/utils-go/numbers"
 )
 
 func TestUserRelays(t *testing.T) {
@@ -730,6 +731,161 @@ func TestAllAppsRelays(t *testing.T) {
 	}
 }
 
+func TestAppLatency(t *testing.T) {
+	todaysLatency := fakeTodaysLatency()
+	errBackendFailure := errors.New("backend error")
+
+	testCases := []struct {
+		name                string
+		requestedApp        string
+		expected            AppLatencyResponse
+		backendErr          error
+		expectedErr         error
+		expectedTodaysCalls int
+	}{
+		{
+			name:         "Correct latency data is returned",
+			requestedApp: "app1",
+			expected: AppLatencyResponse{
+				Application:  "app1",
+				From:         todaysLatency["app1"][0].Time,
+				To:           todaysLatency["app1"][len(todaysLatency["app1"])-1].Time,
+				DailyLatency: todaysLatency["app1"],
+			},
+		},
+		{
+			name:         "Returns error if requested app not found",
+			requestedApp: "app42",
+			expectedErr:  ErrAppLatencyNotFound,
+		},
+		{
+			name:         "Backend service error",
+			requestedApp: "app1",
+			backendErr:   errBackendFailure,
+			expectedErr:  ErrAppLatencyNotFound,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fakeBackend := fakeBackend{
+				todaysLatency: todaysLatency,
+				err:           tc.backendErr,
+			}
+
+			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			time.Sleep(200 * time.Millisecond)
+			got, err := relayMeter.AppLatency(tc.requestedApp)
+			if err != nil {
+				if tc.expectedErr == nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+				if !strings.Contains(err.Error(), tc.expectedErr.Error()) {
+					t.Fatalf("Expected error to contain: %q, got: %v", tc.expectedErr.Error(), err)
+				}
+			}
+
+			if diff := cmp.Diff(tc.expected, got); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestAllAppsLatencies(t *testing.T) {
+	todaysLatency := fakeTodaysLatency()
+	errBackendFailure := errors.New("backend error")
+
+	testCases := []struct {
+		name                string
+		todaysLatency       map[string][]Latency
+		expected            map[string]AppLatencyResponse
+		emptyLatencySlice   bool
+		expectedErr         error
+		backendErr          error
+		expectedTodaysCalls int
+	}{
+		{
+			name: "Correct latency data is returned",
+			expected: map[string]AppLatencyResponse{
+				"app1": {
+					Application:  "app1",
+					From:         todaysLatency["app1"][0].Time,
+					To:           todaysLatency["app1"][len(todaysLatency["app1"])-1].Time,
+					DailyLatency: todaysLatency["app1"],
+				},
+				"app2": {
+					Application:  "app2",
+					From:         todaysLatency["app2"][0].Time,
+					To:           todaysLatency["app2"][len(todaysLatency["app2"])-1].Time,
+					DailyLatency: todaysLatency["app2"],
+				},
+				"app4": {
+					Application:  "app4",
+					From:         todaysLatency["app4"][0].Time,
+					To:           todaysLatency["app4"][len(todaysLatency["app4"])-1].Time,
+					DailyLatency: todaysLatency["app4"],
+				},
+			},
+		},
+		{
+			name:        "Backend service error",
+			backendErr:  errBackendFailure,
+			expectedErr: errBackendFailure,
+			expected:    map[string]AppLatencyResponse{},
+		},
+		{
+			name:              "Empty latency response",
+			backendErr:        nil,
+			expectedErr:       nil,
+			emptyLatencySlice: true,
+			expected:          map[string]AppLatencyResponse{},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.emptyLatencySlice == true {
+				for key := range todaysLatency {
+					todaysLatency[key] = []Latency{}
+				}
+			}
+
+			fakeBackend := fakeBackend{
+				todaysLatency: todaysLatency,
+				err:           tc.backendErr,
+			}
+
+			relayMeter := NewRelayMeter(&fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			time.Sleep(200 * time.Millisecond)
+			rawGot, err := relayMeter.AllAppsLatencies()
+
+			if err != nil {
+				if tc.expectedErr == nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+				if !strings.Contains(err.Error(), tc.expectedErr.Error()) {
+					t.Fatalf("Expected error to contain: %q, got: %v", tc.expectedErr.Error(), err)
+				}
+			}
+
+			// Need to convert it to map to be able to compare
+			got := make(map[string]AppLatencyResponse, len(rawGot))
+
+			for _, relResp := range rawGot {
+				got[relResp.Application] = relResp
+			}
+
+			if diff := cmp.Diff(tc.expected, got); diff != "" {
+				t.Errorf("unexpected value (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestLoadBalancerRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
 	usageData := fakeDailyMetrics()
@@ -1205,13 +1361,14 @@ func TestAllRelaysOrigin(t *testing.T) {
 }
 
 type fakeBackend struct {
-	usage             map[time.Time]map[string]RelayCounts
-	err               error
-	todaysUsage       map[string]RelayCounts
-	todaysOriginUsage map[string]RelayCounts
-	userApps          map[string][]string
-
+	usage              map[time.Time]map[string]RelayCounts
+	err                error
+	todaysUsage        map[string]RelayCounts
+	todaysOriginUsage  map[string]RelayCounts
+	todaysLatency      map[string][]Latency
+	userApps           map[string][]string
 	todaysMetricsCalls int
+	todaysLatencyCalls int
 	dailyMetricsCalls  int
 	dailyMetricsFrom   time.Time
 	dailyMetricsTo     time.Time
@@ -1228,7 +1385,12 @@ func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[string]R
 
 func (f *fakeBackend) TodaysUsage() (map[string]RelayCounts, error) {
 	f.todaysMetricsCalls++
-	return f.todaysUsage, nil
+	return f.todaysUsage, f.err
+}
+
+func (f *fakeBackend) TodaysLatency() (map[string][]Latency, error) {
+	f.todaysLatencyCalls++
+	return f.todaysLatency, f.err
 }
 
 func (f *fakeBackend) TodaysOriginUsage() (map[string]RelayCounts, error) {
@@ -1273,5 +1435,25 @@ func fakeTodaysMetrics() map[string]RelayCounts {
 		"app1": {Success: 50, Failure: 40},
 		"app2": {Success: 30, Failure: 70},
 		"app4": {Success: 500, Failure: 700},
+	}
+}
+
+func fakeTodaysLatency() map[string][]Latency {
+	hourFormat := "2006-01-02 15:04:00Z"
+	now, _ := time.Parse(hourFormat, time.Now().Format(hourFormat))
+
+	latencyMetrics := []Latency{}
+
+	for i := 0; i < 24; i++ {
+		latencyMetrics = append(latencyMetrics, Latency{
+			Time:    now.Add(-(time.Hour * time.Duration(24-i+1))),
+			Latency: numbers.RoundFloat(0.11111+(float64(i)*0.01111), 5),
+		})
+	}
+
+	return map[string][]Latency{
+		"app1": latencyMetrics,
+		"app2": latencyMetrics,
+		"app4": latencyMetrics,
 	}
 }

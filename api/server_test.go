@@ -502,6 +502,8 @@ type fakeRelayMeter struct {
 	allLoadBalancersResponse   []LoadBalancerRelaysResponse
 	allClassificationsResponse []OriginClassificationsResponse
 	responseErr                error
+	latencyResponse            AppLatencyResponse
+	allLatencyResponse         []AppLatencyResponse
 }
 
 func (f *fakeRelayMeter) AppRelays(app string, from, to time.Time) (AppRelaysResponse, error) {
@@ -549,6 +551,15 @@ func (f *fakeRelayMeter) RelaysOrigin(origin string, from, to time.Time) (Origin
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.allClassificationsResponse[0], f.responseErr
+}
+
+func (f *fakeRelayMeter) AllAppsLatencies() ([]AppLatencyResponse, error) {
+	return f.allLatencyResponse, f.responseErr
+}
+
+func (f *fakeRelayMeter) AppLatency(app string) (AppLatencyResponse, error) {
+	f.requestedApp = app
+	return f.latencyResponse, f.responseErr
 }
 
 func TestTimePeriod(t *testing.T) {
