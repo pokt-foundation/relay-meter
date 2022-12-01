@@ -27,6 +27,8 @@ var (
 	totalRelaysPath         = regexp.MustCompile(`^/v0/relays`)
 	originUsagePath         = regexp.MustCompile(`^/v0/relays/origin-classification`)
 	specificOriginUsagePath = regexp.MustCompile(`^/v0/relays/origin-classification/([[:alnum:]].*)`)
+	appsLatencyPath         = regexp.MustCompile(`^/v0/latency/apps/([[:alnum:]]+)$`)
+	allAppsLatencyPath      = regexp.MustCompile(`^/v0/latency/apps`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -83,6 +85,13 @@ func handleTotalRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter
 	handleEndpoint(l, meterEndpoint, w, req)
 }
 
+func handleSpecificOriginClassification(meter RelayMeter, l *logger.Logger, origin string, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.RelaysOrigin(origin, from, to)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
 func handleOriginClassification(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.AllRelaysOrigin(from, to)
@@ -90,9 +99,16 @@ func handleOriginClassification(meter RelayMeter, l *logger.Logger, w http.Respo
 	handleEndpoint(l, meterEndpoint, w, req)
 }
 
-func handleSpecificOriginClassification(meter RelayMeter, l *logger.Logger, origin string, w http.ResponseWriter, req *http.Request) {
+func handleAppLatency(meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.RelaysOrigin(origin, from, to)
+		return meter.AppLatency(app)
+	}
+	handleEndpoint(l, meterEndpoint, w, req)
+}
+
+func handleAllAppsLatency(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+	meterEndpoint := func(from, to time.Time) (any, error) {
+		return meter.AllAppsLatencies()
 	}
 	handleEndpoint(l, meterEndpoint, w, req)
 }
@@ -207,6 +223,11 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 			return
 		}
 
+		if appID := match(appsLatencyPath, req.URL.Path); appID != "" {
+			handleAppLatency(meter, l, appID, w, req)
+			return
+		}
+
 		if allAppsRelaysPath.Match([]byte(req.URL.Path)) {
 			handleAllAppsRelays(meter, l, w, req)
 			return
@@ -229,6 +250,11 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 		if totalRelaysPath.Match([]byte(req.URL.Path)) {
 			handleTotalRelays(meter, l, w, req)
+			return
+		}
+
+		if allAppsLatencyPath.Match([]byte(req.URL.Path)) {
+			handleAllAppsLatency(meter, l, w, req)
 			return
 		}
 
