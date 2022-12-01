@@ -106,7 +106,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 
 		// TODO: remove this after we get a better way to ensure that the layout will match in different timezones
 		if strings.HasSuffix(items[0], "Z") {
-			items[0] = items[0][:len(items[0])-1] + "+00"
+			items[0] = strings.Replace(items[0], "Z", "+00", 1)
 		}
 		if !strings.HasSuffix(items[0], "+00") {
 			items[0] = items[0][:len(items[0])-3] + "+00"
@@ -188,13 +188,12 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	if countStr == "0" {
 		return time.Time{}, time.Time{}, nil
 	}
-	firstStr = strings.Replace(firstStr, "-04:00", "Z", 1)
+
 	first, err := parseDate(firstStr)
 	if err != nil {
 		return first, last, err
 	}
 
-	lastStr = strings.Replace(lastStr, "-04:00", "Z", 1)
 	last, err = parseDate(lastStr)
 	return first, last, err
 }
@@ -420,7 +419,7 @@ func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 
 		// TODO: remove this after we get a better way to ensure that the layout will match in different timezones
 		if strings.HasSuffix(items[1], "Z") {
-			items[1] = items[1][:len(items[1])-1] + "+00"
+			items[1] = strings.Replace(items[1], "Z", "+00", 1)
 		}
 		if !strings.HasSuffix(items[1], "+00") {
 			items[1] = items[1][:len(items[1])-3] + "+00"
