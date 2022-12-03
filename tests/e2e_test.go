@@ -7,15 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/adshmh/meter/api"
 	"github.com/adshmh/meter/db"
 	"github.com/gojektech/heimdall/httpclient"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	"github.com/influxdata/influxdb-client-go/v2/api"
+	influxAPI "github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/pokt-foundation/portal-api-go/repository"
 	"github.com/stretchr/testify/require"
 )
@@ -30,6 +30,7 @@ var (
 		DailyBucket:   "mainnetRelay",
 		CurrentBucket: "mainnetRelay",
 	}
+	today = startOfDay(time.Now().UTC())
 )
 
 func Test_RelayMeter_E2E(t *testing.T) {
@@ -51,31 +52,49 @@ func Test_RelayMeter_E2E(t *testing.T) {
 	testInfluxClient := db.NewInfluxDBSource(influxOptions)
 
 	tests := []struct {
-		name           string
-		numberOfRelays int
-		err            error
+		name                string
+		numberOfRelays      int
+		expectedDailyCounts map[time.Time]map[string]api.RelayCounts
+		err                 error
 	}{
 		{
 			name:           "Should collect a set number of relays from Influx",
 			numberOfRelays: 100_000,
-			err:            nil,
+			expectedDailyCounts: map[time.Time]map[string]api.RelayCounts{
+				today: {
+					"test_019c3f109073c77cd6d8bca9d1ff21b1ad5328ba04a5a610ba1bd72e1c5": {Success: 8889, Failure: 1111},
+					"test_166969ae8263902693c0fc1d3569207a4f6f380d3d4d514e7fd819a69d4": {Success: 8889, Failure: 1111},
+					"test_244e2ede722d756188316196fbf1018dbec087f6caee76bb4bc2861d46c": {Success: 8889, Failure: 1111},
+					"test_46a9d0c7d69ac65ffcd508b068ea2651e5d4bd5f4760bd2643584b9ef6d": {Success: 8888, Failure: 1112},
+					"test_5d57036c3bb5bd0de0319771cfdb3b2a28d4d64e33a3a23e6dcd6057f55": {Success: 8889, Failure: 1111},
+					"test_d9470aef46d0ebd3cb3076f3a5a3228c650e374c69b3665b0e5b0017a69": {Success: 8889, Failure: 1111},
+					"test_e4c4c130d41268513268a376ed2204104b2ac4498a35d3fe26450460fb7": {Success: 8889, Failure: 1111},
+					"test_efc21889053171849c02dc71c4859b113c8b7b66dd2fbde268381e07a7c": {Success: 8888, Failure: 1112},
+					"test_f9fe17a1f6aaca7fe9df6499e569ae2f4910708f636beb1efa20cebda4d": {Success: 8889, Failure: 1111},
+					"test_fe0fc623aff8bba4ba1984e0c521c08874c9519cc6dcd518a15dd241f53": {Success: 8889, Failure: 1111},
+				},
+			},
+
+			err: nil,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			populateInfluxRelays(writeAPI, test.numberOfRelays)
+			/* Populate Relays in Influx DB */
+			populateInfluxRelays(writeAPI, today, test.numberOfRelays)
 			time.Sleep(1 * time.Second)
 
-			timeTest := time.Now()
-
-			// TEMP TEST VERIFICATION
-			from, to := timeTest.AddDate(0, -2, 2), timeTest.AddDate(0, 0, 1)
-			fmt.Println("DATES", "FROM", from, "TO", to)
-			dailyCount, err := testInfluxClient.DailyCounts(from, to)
+			/* Verify Results from Influx Using Collector Influx Methods */
+			dailyCounts, err := testInfluxClient.DailyCounts(today, today.AddDate(0, 0, 1))
+			PrettyString("DAILY COUNTS", dailyCounts)
 			c.NoError(err)
+			c.Equal(test.expectedDailyCounts, dailyCounts)
 
-			PrettyString("DAILY COUNTS", dailyCount)
+			todaysCounts, err := testInfluxClient.TodaysCounts()
+			PrettyString("TODAYS COUNTS", todaysCounts)
+			c.NoError(err)
+			c.Equal(test.expectedDailyCounts[today], todaysCounts)
 
 			// TODO - GETTING TODAYS COUNTS, NOT GETTING ANY OF TODAYS USAGE.
 		})
@@ -115,19 +134,14 @@ func initTestInfluxClient(c *require.Assertions) influxdb2.Client {
 }
 
 // Sends a test batch of relays
-func populateInfluxRelays(writeAPI api.WriteAPI, numberOfRelays int) {
-	rand.Seed(time.Now().Unix())
-
-	fmt.Println("CREATING RELAYS FOR", time.Now().UTC().AddDate(0, 0, -2))
-
-	start := time.Now()
+func populateInfluxRelays(writeAPI influxAPI.WriteAPI, date time.Time, numberOfRelays int) {
 	for i := 0; i < numberOfRelays; i++ {
-		randomIndex := rand.Intn(len(testRelays))
-		randomRelay := testRelays[randomIndex]
-		relayTimestamp := time.Now().UTC().AddDate(0, 0, -2)
+		index := i % 10
+		relay := testRelays[index]
+		relayTimestamp := date.Add((((23 * time.Hour) / time.Duration(numberOfRelays)) * time.Duration(i+1)) + (30 * time.Minute))
 
 		var result string
-		if rand.Intn(63) <= 62 {
+		if i%9 != 0 {
 			result = "200"
 		} else {
 			result = "500"
@@ -136,18 +150,18 @@ func populateInfluxRelays(writeAPI api.WriteAPI, numberOfRelays int) {
 		relayPoint := influxdb2.NewPoint(
 			"relay",
 			map[string]string{
-				"applicationPublicKey": randomRelay.applicationPublicKey,
-				"nodePublicKey":        randomRelay.nodePublicKey,
-				"method":               randomRelay.method,
+				"applicationPublicKey": relay.applicationPublicKey,
+				"nodePublicKey":        relay.nodePublicKey,
+				"method":               relay.method,
 				"result":               result,
-				"blockchain":           randomRelay.blockchain,
-				"blockchainSubdomain":  randomRelay.blockchainSubdomain,
+				"blockchain":           relay.blockchain,
+				"blockchainSubdomain":  relay.blockchainSubdomain,
 				"host":                 "test_0bc93fa",
 				"region":               "us-east-2",
 			},
 			map[string]interface{}{
 				"bytes":       12345,
-				"elapsedTime": randomRelay.elapsedTime,
+				"elapsedTime": relay.elapsedTime,
 				"count":       1,
 			},
 			relayTimestamp,
@@ -158,7 +172,7 @@ func populateInfluxRelays(writeAPI api.WriteAPI, numberOfRelays int) {
 			"origin",
 			map[string]string{},
 			map[string]interface{}{
-				"origin": randomRelay.origin,
+				"origin": relay.origin,
 			},
 			relayTimestamp,
 		)
@@ -166,8 +180,6 @@ func populateInfluxRelays(writeAPI api.WriteAPI, numberOfRelays int) {
 	}
 
 	writeAPI.Flush()
-
-	fmt.Printf("duration: %s", time.Since(start))
 }
 
 type RandomRelay struct {
@@ -342,4 +354,11 @@ func postToPHD[T any](path string, postData []byte) (T, error) {
 	}
 
 	return data, nil
+}
+
+func startOfDay(day time.Time) time.Time {
+	y, m, d := day.Date()
+	l := day.Location()
+
+	return time.Date(y, m, d, 0, 0, 0, 0, l)
 }

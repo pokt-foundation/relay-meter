@@ -111,7 +111,7 @@ func (c *collector) collectTodaysUsage() error {
 	// c.Logger.WithFields(logger.Fields{"todays_metrics_count_per_origin": len(todaysRelaysInOrigin)}).Info("Collected todays metrics")
 
 	todaysLatency, err := c.Source.TodaysLatency()
-	fmt.Println("TodaysLatency FROM", time.Now().Add(-time.Hour*24).Format(time.RFC3339), "LENGTH", len(todaysRelaysInOrigin))
+	// fmt.Println("TodaysLatency FROM", time.Now().Add(-time.Hour*24).Format(time.RFC3339), "LENGTH", len(todaysRelaysInOrigin))
 	if err != nil {
 		// c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily latencies")
 	}
