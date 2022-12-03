@@ -11,11 +11,6 @@ import (
 	"github.com/adshmh/meter/api"
 )
 
-const (
-	COLLECT_INTERVAL_SECONDS = 120
-	REPORT_INTERVAL_SECONDS  = 10
-)
-
 type Source interface {
 	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
 	TodaysCounts() (map[string]api.RelayCounts, error)
@@ -64,24 +59,37 @@ type collector struct {
 	*logger.Logger
 }
 
+// TEMP REMOVE
+func startOfDay(day time.Time) time.Time {
+	y, m, d := day.Date()
+	l := day.Location()
+
+	return time.Date(y, m, d, 0, 0, 0, 0, l)
+}
+
+// TEMP REMOVE
+
+// TODO - Put back all regualr logs and remove debug logs
+
 // Collects relay usage data from the source and uses the writer to store.
 //
 //	-
 func (c *collector) CollectDailyUsage(from, to time.Time) error {
-	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting daily metrics collection...")
+	// c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting daily metrics collection...")
 	from, to, err := api.AdjustTimePeriod(from, to)
 	if err != nil {
 		return err
 	}
-	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Daily metrics collection period adjusted.")
+	// c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Daily metrics collection period adjusted.")
 
 	counts, err := c.Source.DailyCounts(from, to)
 
-	fmt.Println("DAILY COUNT HERE~~~", counts)
+	fmt.Println("DailyCounts FROM", from, "TO", to, "LENGTH", len(counts))
+
 	if err != nil {
 		return err
 	}
-	c.Logger.WithFields(logger.Fields{"daily_metrics_count": len(counts), "from": from, "to": to}).Info("Collected daily metrics")
+	// c.Logger.WithFields(logger.Fields{"daily_metrics_count": len(counts), "from": from, "to": to}).Info("Collected daily metrics")
 
 	// TODO: Add counts per origins
 	return c.Writer.WriteDailyUsage(counts, nil)
@@ -89,29 +97,32 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 
 func (c *collector) collectTodaysUsage() error {
 	todaysCounts, err := c.Source.TodaysCounts()
+	fmt.Println("TodaysCounts FROM", startOfDay(time.Now()).Format(time.RFC3339), "LENGTH", len(todaysCounts))
 	if err != nil {
-		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily counts")
+		// c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily counts")
 	}
-	c.Logger.WithFields(logger.Fields{"todays_usage_count": len(todaysCounts)}).Info("Collected todays usage")
+	// c.Logger.WithFields(logger.Fields{"todays_usage_count": len(todaysCounts)}).Info("Collected todays usage")
 
 	todaysRelaysInOrigin, err := c.Source.TodaysCountsPerOrigin()
+	fmt.Println("TodaysCountsPerOrigin FROM", startOfDay(time.Now()).Format(time.RFC3339), "LENGTH", len(todaysRelaysInOrigin))
 	if err != nil {
 		return err
 	}
-	c.Logger.WithFields(logger.Fields{"todays_metrics_count_per_origin": len(todaysRelaysInOrigin)}).Info("Collected todays metrics")
+	// c.Logger.WithFields(logger.Fields{"todays_metrics_count_per_origin": len(todaysRelaysInOrigin)}).Info("Collected todays metrics")
 
 	todaysLatency, err := c.Source.TodaysLatency()
+	fmt.Println("TodaysLatency FROM", time.Now().Add(-time.Hour*24).Format(time.RFC3339), "LENGTH", len(todaysRelaysInOrigin))
 	if err != nil {
-		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily latencies")
+		// c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily latencies")
 	}
-	c.Logger.WithFields(logger.Fields{"todays_latencies_count": len(todaysLatency)}).Info("Collected todays latencies")
+	// c.Logger.WithFields(logger.Fields{"todays_latencies_count": len(todaysLatency)}).Info("Collected todays latencies")
 
 	return c.Writer.WriteTodaysMetrics(todaysCounts, todaysRelaysInOrigin, todaysLatency)
 }
 
 func (c *collector) collect() error {
 	if err := c.collectTodaysUsage(); err != nil {
-		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to write todays metrics")
+		// c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to write todays metrics")
 		return err
 	}
 
@@ -119,7 +130,7 @@ func (c *collector) collect() error {
 	if err != nil {
 		return err
 	}
-	c.Logger.WithFields(logger.Fields{"first": first, "last": last}).Info("Verified existing daily metrics")
+	// c.Logger.WithFields(logger.Fields{"first": first, "last": last}).Info("Verified existing daily metrics")
 
 	// We assume there are no gaps between stored metrics from start to end, so
 	// 	start collecting metrics after the last saved date
@@ -129,7 +140,7 @@ func (c *collector) collect() error {
 		return err
 	}
 	if last.Equal(today.AddDate(0, 0, -1)) || last.After(today.AddDate(0, 0, -1)) {
-		c.Logger.WithFields(logger.Fields{"today": today, "last_daily_collected": last}).Info("Last collected daily metric was yesterday, skipping daily metrics collection...")
+		// c.Logger.WithFields(logger.Fields{"today": today, "last_daily_collected": last}).Info("Last collected daily metric was yesterday, skipping daily metrics collection...")
 		return nil
 	}
 	var from time.Time
@@ -148,11 +159,11 @@ func (c *collector) collect() error {
 
 func (c *collector) Start(ctx context.Context, collectIntervalSeconds, reportIntervalSeconds int) {
 	// Do an initial data collection, and then repeat on set intervals
-	c.Logger.Info("Starting initial data collection...")
+	// c.Logger.Info("Starting initial data collection...")
 	if err := c.collect(); err != nil {
-		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
+		// c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
 	}
-	c.Logger.Info("Initial data collection completed.")
+	// c.Logger.Info("Initial data collection completed.")
 
 	reportTicker := time.NewTicker(time.Duration(reportIntervalSeconds) * time.Second)
 	collectTicker := time.NewTicker(time.Duration(collectIntervalSeconds) * time.Second)
@@ -161,17 +172,17 @@ func (c *collector) Start(ctx context.Context, collectIntervalSeconds, reportInt
 	for {
 		select {
 		case <-ctx.Done():
-			c.Logger.Warn("Context has been cancelled. Collecter exiting.")
+			// c.Logger.Warn("Context has been cancelled. Collecter exiting.")
 			return
 		case <-reportTicker.C:
 			remaining -= reportIntervalSeconds
-			c.Logger.Info(fmt.Sprintf("Will collect data in %d seconds...", remaining))
+			// c.Logger.Info(fmt.Sprintf("Will collect data in %d seconds...", remaining))
 		case <-collectTicker.C:
-			c.Logger.Info("Starting data collection...")
+			// c.Logger.Info("Starting data collection...")
 			if err := c.collect(); err != nil {
-				c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
+				// c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
 			}
-			c.Logger.Info("Data collection completed.")
+			// c.Logger.Info("Data collection completed.")
 			remaining = collectIntervalSeconds
 		}
 	}

@@ -15,26 +15,26 @@ import (
 )
 
 const (
-	ENV_COLLECT_INTERVAL_SECONDS = "COLLECTION_INTERVAL_SECONDS"
-	ENV_REPORT_INTERVAL_SECONDS  = "REPORT_INTERVAL_SECONDS"
-	ENV_MAX_ARCHIVE_AGE_DAYS     = "MAX_ARCHIVE_AGE"
+	collectingIntervalSeconds = "COLLECTION_INTERVAL_SECONDS"
+	reportIntervalSeconds     = "REPORT_INTERVAL_SECONDS"
+	maxArchiveAgeDays         = "MAX_ARCHIVE_AGE"
 
-	COLLECT_INTERVAL_DEFAULT_SECONDS = 300
-	REPORT_INTERVAL_DEFAULT_SECONDS  = 30
-	MAX_ARCHIVE_AGE_DEFAULT_DAYS     = 30
+	defaultCollectIntervalSeconds = 300
+	defaultReportIntervalSeconds  = 30
+	defaultMaxArchiveAgeDays      = 30
 )
 
 type options struct {
 	collectionInterval int
 	reportingInterval  int
-	maxArchiveAgeDays  int
+	maxArchiveAgeDays  time.Duration
 }
 
 func gatherOptions() options {
 	return options{
-		collectionInterval: int(environment.GetInt64(ENV_COLLECT_INTERVAL_SECONDS, COLLECT_INTERVAL_DEFAULT_SECONDS)),
-		reportingInterval:  int(environment.GetInt64(ENV_REPORT_INTERVAL_SECONDS, REPORT_INTERVAL_DEFAULT_SECONDS)),
-		maxArchiveAgeDays:  int(environment.GetInt64(ENV_MAX_ARCHIVE_AGE_DAYS, MAX_ARCHIVE_AGE_DEFAULT_DAYS)),
+		collectionInterval: int(environment.GetInt64(collectingIntervalSeconds, defaultCollectIntervalSeconds)),
+		reportingInterval:  int(environment.GetInt64(reportIntervalSeconds, defaultReportIntervalSeconds)),
+		maxArchiveAgeDays:  time.Duration(environment.GetInt64(maxArchiveAgeDays, defaultMaxArchiveAgeDays)) * 24 * time.Hour,
 	}
 }
 
@@ -46,7 +46,7 @@ func main() {
 	influxClient := db.NewInfluxDBSource(influxOptions)
 	pgClient, err := db.NewPostgresClient(postgresOptions)
 	if err != nil {
-		fmt.Errorf("Error setting up Postgres client: %v\n", err)
+		fmt.Printf("Error setting up Postgres client: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -56,6 +56,6 @@ func main() {
 	log := logger.New()
 	log.Formatter = &logger.JSONFormatter{}
 
-	collector := collector.NewCollector(influxClient, pgClient, time.Duration(options.maxArchiveAgeDays)*24*time.Hour, log)
+	collector := collector.NewCollector(influxClient, pgClient, options.maxArchiveAgeDays, log)
 	collector.Start(context.Background(), options.collectionInterval, options.reportingInterval)
 }

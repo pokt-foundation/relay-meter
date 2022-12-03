@@ -57,7 +57,7 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api
 
 	dailyCounts := make(map[time.Time]map[string]api.RelayCounts)
 	// TODO: the influx doc seems to have a bug when describing the 'stop' parameter of range function,
-	//	i.e. it says "Results exclude rows with _time values that match the specified start time.", likely meant to say 'stop time'
+	//	i.e. it says "Results exclude rows with _time values that match the specified starzt time.", likely meant to say 'stop time'
 	//	https://docs.influxdata.com/flux/v0.x/stdlib/universe/range/
 	// 	--> this needs verification to make sure we do not double-count the last second of each day
 
@@ -71,8 +71,6 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api
 		  |> group(columns: ["applicationPublicKey", "result"])
 		  |> keep(columns: ["applicationPublicKey", "result", "_value"])`
 		fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, current.Format(time.RFC3339), current.AddDate(0, 0, 1).Format(time.RFC3339))
-
-		fmt.Println("QUERY IS HERE", fluxQuery)
 
 		result, err := queryAPI.Query(context.Background(), fluxQuery)
 		if err != nil {
@@ -257,6 +255,7 @@ func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 
 	// TODO: send queries in parallel
 	oneDayAgo := time.Now().Add(-time.Hour * 24).Format(time.RFC3339)
+
 	queryString := `from(bucket: %q)
 	  |> range(start: %s)
 	  |> filter(fn: (r) => r["_measurement"] == "relay")
