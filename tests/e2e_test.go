@@ -695,13 +695,6 @@ func post[T any](baseURL, path string, postData []byte) (T, error) {
 	return data, nil
 }
 
-func startOfDay(day time.Time) time.Time {
-	y, m, d := day.Date()
-	l := day.Location()
-
-	return time.Date(y, m, d, 0, 0, 0, 0, l)
-}
-
 // GET test util func
 func get[T any](baseURL, path, id, params string) (T, error) {
 	rawURL := fmt.Sprintf("%s/%s", baseURL, path)
@@ -737,4 +730,12 @@ func get[T any](baseURL, path, id, params string) (T, error) {
 	}
 
 	return data, nil
+}
+
+// TODO move this to utils-go
+func startOfDay(day time.Time) time.Time {
+	y, m, d := day.Date()
+	l := day.Location()
+
+	return time.Date(y, m, d, 0, 0, 0, 0, l)
 }

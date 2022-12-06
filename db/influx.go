@@ -391,8 +391,8 @@ func (i *influxDB) AppRelays(from, to time.Time) (map[string]api.RelayCounts, er
 }
 
 // startOfDay returns the time matching the start of the day of the input.
-//
 //	timezone/location is maintained.
+// TODO move this to utils-go
 func startOfDay(day time.Time) time.Time {
 	y, m, d := day.Date()
 	l := day.Location()
