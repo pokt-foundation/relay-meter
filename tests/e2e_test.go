@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -18,19 +19,25 @@ import (
 	influxAPI "github.com/influxdata/influxdb-client-go/v2/api"
 	influxDomain "github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/pokt-foundation/portal-api-go/repository"
+	stringUtils "github.com/pokt-foundation/utils-go/strings"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	mainBucket   = "mainnetRelay"
-	main1mBucket = "mainnetRelayApp1m"
+	phdBaseURL        = "http://localhost:8090"
+	apiKey            = "test_api_key_6789"
+	relayMeterBaseURL = "http://localhost:9898"
+	testUserID        = "12345678fgte0db3b6c63124"
+	mainBucket        = "mainnetRelay"
+	main1mBucket      = "mainnetRelayApp1m"
 )
 
 var (
 	ctx               = context.Background()
-	today             = startOfDay(time.Now().UTC().AddDate(0, 0, 1))
+	today             = startOfDay(time.Now().UTC())
+	endOfDay          = today.AddDate(0, 0, 1)
 	todayFormatted    = today.Format(time.RFC3339)
-	endOfDayFormatted = today.AddDate(0, 0, 1).Format(time.RFC3339)
+	endOfDayFormatted = endOfDay.Format(time.RFC3339)
 	influxOptions     = db.InfluxDBOptions{
 		URL:                 "http://localhost:8086",
 		Token:               "mytoken",
@@ -40,25 +47,24 @@ var (
 		DailyOriginBucket:   "mainnetOrigin1d",
 		CurrentOriginBucket: "mainnetOrigin60m",
 	}
+
+	testClient       = httpclient.NewClient(httpclient.WithHTTPTimeout(5*time.Second), httpclient.WithRetryCount(0))
+	ErrResponseNotOK = errors.New("Response not OK")
 )
 
-func Test_RelayMeter_E2E(t *testing.T) {
+func Test_RelayMeter_Collector_E2E(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping end to end test")
 	}
 
 	c := require.New(t)
 
-	/* Initialize PHD Data */
-	err := populatePocketHTTPDB()
-	c.NoError(err)
-
 	/* Create Test Influx Client */
 	client, orgID := initTestInfluxClient(c)
 	tasksAPI := client.TasksAPI()
 	writeAPI := client.WriteAPI(influxOptions.Org, mainBucket)
 
-	initInfluxBuckets(client, orgID, c)
+	resetInfluxBuckets(client, orgID, c)
 	tasks := initInfluxTasks(tasksAPI, orgID, c)
 
 	/* Create Test Client to Verify InfluxDB contents */
@@ -76,29 +82,29 @@ func Test_RelayMeter_E2E(t *testing.T) {
 			numberOfRelays: 100_000,
 			expectedDailyCounts: map[time.Time]map[string]api.RelayCounts{
 				today: {
-					"test_019c3f109073c77cd6d8bca9d1ff21b1ad5328ba04a5a610ba1bd72e1c5": {Success: 8889, Failure: 1111},
-					"test_166969ae8263902693c0fc1d3569207a4f6f380d3d4d514e7fd819a69d4": {Success: 8889, Failure: 1111},
-					"test_244e2ede722d756188316196fbf1018dbec087f6caee76bb4bc2861d46c": {Success: 8889, Failure: 1111},
-					"test_46a9d0c7d69ac65ffcd508b068ea2651e5d4bd5f4760bd2643584b9ef6d": {Success: 8888, Failure: 1111},
-					"test_5d57036c3bb5bd0de0319771cfdb3b2a28d4d64e33a3a23e6dcd6057f55": {Success: 8889, Failure: 1111},
-					"test_d9470aef46d0ebd3cb3076f3a5a3228c650e374c69b3665b0e5b0017a69": {Success: 8889, Failure: 1111},
-					"test_e4c4c130d41268513268a376ed2204104b2ac4498a35d3fe26450460fb7": {Success: 8889, Failure: 1111},
-					"test_efc21889053171849c02dc71c4859b113c8b7b66dd2fbde268381e07a7c": {Success: 8888, Failure: 1112},
-					"test_f9fe17a1f6aaca7fe9df6499e569ae2f4910708f636beb1efa20cebda4d": {Success: 8889, Failure: 1111},
-					"test_fe0fc623aff8bba4ba1984e0c521c08874c9519cc6dcd518a15dd241f53": {Success: 8889, Failure: 1111},
+					testRelays[0].applicationPublicKey: {Success: 8888, Failure: 1112},
+					testRelays[1].applicationPublicKey: {Success: 8889, Failure: 1111},
+					testRelays[2].applicationPublicKey: {Success: 8889, Failure: 1111},
+					testRelays[3].applicationPublicKey: {Success: 8889, Failure: 1111},
+					testRelays[4].applicationPublicKey: {Success: 8889, Failure: 1111},
+					testRelays[5].applicationPublicKey: {Success: 8889, Failure: 1111},
+					testRelays[6].applicationPublicKey: {Success: 8889, Failure: 1111},
+					testRelays[7].applicationPublicKey: {Success: 8889, Failure: 1111},
+					testRelays[8].applicationPublicKey: {Success: 8889, Failure: 1111},
+					testRelays[9].applicationPublicKey: {Success: 8888, Failure: 1111},
 				},
 			},
 			expectedHourlyLatency: map[string]float64{
-				"test_019c3f109073c77cd6d8bca9d1ff21b1ad5328ba04a5a610ba1bd72e1c5": 0.1162,
-				"test_166969ae8263902693c0fc1d3569207a4f6f380d3d4d514e7fd819a69d4": 0.15785,
-				"test_244e2ede722d756188316196fbf1018dbec087f6caee76bb4bc2861d46c": 0.08137,
-				"test_46a9d0c7d69ac65ffcd508b068ea2651e5d4bd5f4760bd2643584b9ef6d": 0.0814,
-				"test_5d57036c3bb5bd0de0319771cfdb3b2a28d4d64e33a3a23e6dcd6057f55": 0.2205,
-				"test_d9470aef46d0ebd3cb3076f3a5a3228c650e374c69b3665b0e5b0017a69": 0.1093,
-				"test_e4c4c130d41268513268a376ed2204104b2ac4498a35d3fe26450460fb7": 0.20045,
-				"test_efc21889053171849c02dc71c4859b113c8b7b66dd2fbde268381e07a7c": 0.16475,
-				"test_f9fe17a1f6aaca7fe9df6499e569ae2f4910708f636beb1efa20cebda4d": 0.0932,
-				"test_fe0fc623aff8bba4ba1984e0c521c08874c9519cc6dcd518a15dd241f53": 0.05467,
+				testRelays[0].applicationPublicKey: 0.16475,
+				testRelays[1].applicationPublicKey: 0.20045,
+				testRelays[2].applicationPublicKey: 0.08137,
+				testRelays[3].applicationPublicKey: 0.15785,
+				testRelays[4].applicationPublicKey: 0.05467,
+				testRelays[5].applicationPublicKey: 0.1093,
+				testRelays[6].applicationPublicKey: 0.2205,
+				testRelays[7].applicationPublicKey: 0.0932,
+				testRelays[8].applicationPublicKey: 0.1162,
+				testRelays[9].applicationPublicKey: 0.0814,
 			},
 			err: nil,
 		},
@@ -155,44 +161,181 @@ func Test_RelayMeter_E2E(t *testing.T) {
 					}
 				}
 			}
-
-			/* Test API Server */
-			// relays
-			path := fmt.Sprintf("relays?from=%s&to=%s", todayFormatted, endOfDayFormatted)
-			test, err := getRelayMeter[any](path, "")
-			c.NoError(err)
-
-			fmt.Println("ERROR", err)
-			PrettyString("TEST", test)
-
-			// TODO - test all of these
-			// relays/apps
-			// relays/apps
-			// relays/users
-			// relays/endpoints
-			// relays/endpoints
-			// relays/origin-classification
-			// relays/origin-classification
-			// latency/apps
-			// latency/apps
 		})
 	}
 
 	client.Close()
 }
 
-func PrettyString(label string, thing interface{}) {
-	jsonThing, _ := json.Marshal(thing)
-	str := string(jsonThing)
+func Test_RelayMeter_APIServer_E2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping end to end test")
+	}
 
-	var prettyJSON bytes.Buffer
-	_ = json.Indent(&prettyJSON, []byte(str), "", "    ")
-	output := prettyJSON.String()
+	c := require.New(t)
 
-	fmt.Println(label, output)
+	/* Initialize PHD Data */
+	err := populatePocketHTTPDB()
+	c.NoError(err)
+
+	time.Sleep(30 * time.Second) // Wait for collector to run and write to Postgres
+
+	tests := []struct {
+		name string
+		date time.Time
+		appPubKey,
+		userID,
+		origin string
+		expectedHourlyLatency map[string]float64
+		err                   error
+	}{
+		{
+			name:      "Should return relays from the API server",
+			date:      today,
+			appPubKey: testRelays[0].applicationPublicKey,
+			userID:    testUserID,
+			origin:    testRelays[0].origin,
+			expectedHourlyLatency: map[string]float64{
+				testRelays[0].applicationPublicKey: 0.16475,
+				testRelays[1].applicationPublicKey: 0.20045,
+				testRelays[2].applicationPublicKey: 0.08137,
+				testRelays[3].applicationPublicKey: 0.15785,
+				testRelays[4].applicationPublicKey: 0.05467,
+				testRelays[5].applicationPublicKey: 0.1093,
+				testRelays[6].applicationPublicKey: 0.2205,
+				testRelays[7].applicationPublicKey: 0.0932,
+				testRelays[8].applicationPublicKey: 0.1162,
+				testRelays[9].applicationPublicKey: 0.0814,
+			},
+			err: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			/* Test API Server */
+			dateParams := fmt.Sprintf("?from=%s&to=%s", test.date.Format(time.RFC3339), test.date.Format(time.RFC3339))
+
+			/* /relays */
+			allRelays, err := get[api.TotalRelaysResponse](relayMeterBaseURL, "v0/relays", "", dateParams)
+			c.Equal(test.err, err)
+			c.NotEmpty(allRelays.Count.Success)
+			c.NotEmpty(allRelays.Count.Failure)
+			c.Equal(allRelays.From, test.date)
+			c.Equal(allRelays.To, test.date.AddDate(0, 0, 1))
+
+			/* /relays/apps */
+			allAppsRelays, err := get[[]api.AppRelaysResponse](relayMeterBaseURL, "v0/relays/apps", "", dateParams)
+			c.Equal(test.err, err)
+			for _, appRelays := range allAppsRelays {
+				c.Len(appRelays.Application, 64)
+				c.NotEmpty(appRelays.Count.Success)
+				c.NotEmpty(appRelays.Count.Failure)
+				c.Equal(appRelays.From, test.date)
+				c.Equal(appRelays.To, test.date.AddDate(0, 0, 1))
+			}
+
+			/* /relays/apps/{APP_PUB_KEY} */
+			appRelays, err := get[api.AppRelaysResponse](relayMeterBaseURL, "v0/relays/apps", test.appPubKey, dateParams)
+			c.Equal(test.err, err)
+			c.Len(appRelays.Application, 64)
+			c.NotEmpty(appRelays.Count.Success)
+			c.NotEmpty(appRelays.Count.Failure)
+			c.Equal(appRelays.From, test.date)
+			c.Equal(appRelays.To, test.date.AddDate(0, 0, 1))
+
+			/* /relays/users/{USER_ID} */
+			userRelays, err := get[api.UserRelaysResponse](relayMeterBaseURL, "v0/relays/users", test.userID, dateParams)
+			c.Equal(test.err, err)
+			c.Len(userRelays.User, 24)
+			c.Len(userRelays.Applications, 10)
+			c.Len(userRelays.Applications[0], 64)
+			c.NotEmpty(userRelays.Count.Success)
+			c.NotEmpty(userRelays.Count.Failure)
+			c.Equal(userRelays.From, test.date)
+			c.Equal(userRelays.To, test.date.AddDate(0, 0, 1))
+
+			/* /relays/endpoints */
+			allEndpointsRelays, err := get[[]api.LoadBalancerRelaysResponse](relayMeterBaseURL, "v0/relays/endpoints", "", dateParams)
+			c.Equal(test.err, err)
+			for _, endpointRelays := range allEndpointsRelays {
+				c.Len(endpointRelays.Endpoint, 24)
+				c.Len(endpointRelays.Applications, 1)
+				c.Len(endpointRelays.Applications[0], 64)
+				c.NotEmpty(endpointRelays.Count.Success)
+				c.NotEmpty(endpointRelays.Count.Failure)
+				c.Equal(endpointRelays.From, test.date)
+				c.Equal(endpointRelays.To, test.date.AddDate(0, 0, 1))
+			}
+
+			/* /relays/endpoints/{ENDPOINT_ID} */
+			endpointRelays, err := get[api.LoadBalancerRelaysResponse](relayMeterBaseURL, "v0/relays/endpoints", allEndpointsRelays[0].Endpoint, dateParams)
+			c.Equal(test.err, err)
+			c.Len(endpointRelays.Endpoint, 24)
+			c.Len(endpointRelays.Applications, 1)
+			c.Len(endpointRelays.Applications[0], 64)
+			c.NotEmpty(endpointRelays.Count.Success)
+			c.NotEmpty(endpointRelays.Count.Failure)
+			c.Equal(endpointRelays.From, test.date)
+			c.Equal(endpointRelays.To, test.date.AddDate(0, 0, 1))
+
+			/* /relays/origin-classification */
+			allOriginRelays, err := get[[]api.OriginClassificationsResponse](relayMeterBaseURL, "v0/relays/origin-classification", "", dateParams)
+			c.Equal(test.err, err)
+			for _, originRelays := range allOriginRelays {
+				c.Len(originRelays.Origin, 20)
+				c.NotEmpty(originRelays.Count.Success)
+				c.Equal(originRelays.From, test.date)
+				c.Equal(originRelays.To, test.date.AddDate(0, 0, 1))
+			}
+
+			/* /relays/origin-classification/{ORIGIN} */
+			url, err := url.Parse(test.origin)
+			c.Equal(test.err, err)
+			originRelays, err := get[api.OriginClassificationsResponse](relayMeterBaseURL, "v0/relays/origin-classification", url.Host, dateParams)
+			c.Equal(test.err, err)
+			c.Equal(url.Host, originRelays.Origin)
+			c.Len(originRelays.Origin, 12)
+			c.NotEmpty(originRelays.Count.Success)
+			c.Equal(originRelays.From, test.date)
+			c.Equal(originRelays.To, test.date.AddDate(0, 0, 1))
+
+			/* /latency/apps */
+			allAppLatencies, err := get[[]api.AppLatencyResponse](relayMeterBaseURL, "v0/latency/apps", "", dateParams)
+			c.Equal(test.err, err)
+			for _, appLatency := range allAppLatencies {
+				c.Len(appLatency.DailyLatency, 24)
+				for _, hourlyLatency := range appLatency.DailyLatency {
+					c.NotEmpty(hourlyLatency)
+					if hourlyLatency.Latency != 0 {
+						c.Equal(test.expectedHourlyLatency[appLatency.Application], hourlyLatency.Latency)
+					}
+				}
+				c.Equal(appLatency.From, time.Now().UTC().Add(-23*time.Hour).Truncate(time.Hour))
+				c.Equal(appLatency.To, time.Now().UTC().Truncate(time.Hour))
+				c.Len(appLatency.Application, 64)
+			}
+
+			/* /latency/apps/{APP_PUB_KEY} */
+			appLatency, err := get[api.AppLatencyResponse](relayMeterBaseURL, "v0/latency/apps", test.appPubKey, dateParams)
+			c.Equal(test.err, err)
+			c.Len(appLatency.DailyLatency, 24)
+			for _, hourlyLatency := range appLatency.DailyLatency {
+				c.NotEmpty(hourlyLatency)
+				if hourlyLatency.Latency != 0 {
+					c.Equal(test.expectedHourlyLatency[appLatency.Application], hourlyLatency.Latency)
+				}
+			}
+			c.Equal(appLatency.From, time.Now().UTC().Add(-23*time.Hour).Truncate(time.Hour))
+			c.Equal(appLatency.To, time.Now().UTC().Truncate(time.Hour))
+			c.Len(appLatency.Application, 64)
+		})
+	}
 }
 
-/* Populate Influx DB */
+/* Test Utility Funcs */
+
+// Initializes the Influx client and returns it alongside the org ID
 func initTestInfluxClient(c *require.Assertions) (influxdb2.Client, string) {
 	client := influxdb2.NewClientWithOptions(
 		influxOptions.URL, influxOptions.Token,
@@ -209,7 +352,8 @@ func initTestInfluxClient(c *require.Assertions) (influxdb2.Client, string) {
 	return client, *dOrg.Id
 }
 
-func initInfluxBuckets(client influxdb2.Client, orgID string, c *require.Assertions) {
+// Resets the Influx bucket each time the collector test runs
+func resetInfluxBuckets(client influxdb2.Client, orgID string, c *require.Assertions) {
 	bucketsAPI := client.BucketsAPI()
 	usedBuckets := []string{mainBucket, main1mBucket, influxOptions.CurrentBucket, influxOptions.CurrentOriginBucket}
 
@@ -224,6 +368,7 @@ func initInfluxBuckets(client influxdb2.Client, orgID string, c *require.Asserti
 	}
 }
 
+// Initializes the Influx tasks used to populate each bucket from the main bucket
 func initInfluxTasks(tasksAPI influxAPI.TasksAPI, orgID string, c *require.Assertions) []*influxDomain.Task {
 	app1mString := fmt.Sprintf(`from(bucket: "%s")
 		|> range(start: %s, stop: %s)
@@ -308,7 +453,7 @@ func initInfluxTasks(tasksAPI influxAPI.TasksAPI, orgID string, c *require.Asser
 	return tasks
 }
 
-// Sends a test batch of relays
+// Saves a test batch of relays to the InfxluDB mainBucket
 func populateInfluxRelays(writeAPI influxAPI.WriteAPI, date time.Time, numberOfRelays int) {
 	timestampInterval := (24 * time.Hour) / time.Duration(numberOfRelays)
 
@@ -367,7 +512,8 @@ func populateInfluxRelays(writeAPI influxAPI.WriteAPI, date time.Time, numberOfR
 	writeAPI.Flush()
 }
 
-type RandomRelay struct {
+// Selection of relays to populate the test InfluxDB (randomly selected from this slice inside populateInfluxRelays)
+var testRelays = []struct {
 	applicationPublicKey,
 	nodePublicKey,
 	method,
@@ -375,140 +521,148 @@ type RandomRelay struct {
 	blockchainSubdomain,
 	origin string
 	elapsedTime float64
-}
-
-// Selection of relays to populate the test InfluxDB (randomly selected from this slice inside )
-var testRelays = []RandomRelay{
+}{
 	{
-		applicationPublicKey: "test_efc21889053171849c02dc71c4859b113c8b7b66dd2fbde268381e07a7c",
+		applicationPublicKey: "12345efc21889053171849c02dc71c4859b113c8b7b66dd2fbde268381e07a7c",
 		nodePublicKey:        "test_node_pub_key_02fbcfbad0777942c1da5425bf0105546e7e7f53fffad9",
 		method:               "eth_chainId",
 		blockchain:           "49",
 		blockchainSubdomain:  "fantom-mainnet",
-		elapsedTime:          0.16475,
 		origin:               "https://app.test1.io",
+		elapsedTime:          0.16475,
 	},
 	{
-		applicationPublicKey: "test_e4c4c130d41268513268a376ed2204104b2ac4498a35d3fe26450460fb7",
+		applicationPublicKey: "12345e4c4c130d41268513268a376ed2204104b2ac4498a35d3fe26450460fb7",
 		nodePublicKey:        "test_node_pub_key_29f42f262efa514fbe93af1e963b40c5cddb2200dd9e0a",
 		method:               "eth_getBalance",
 		blockchain:           "49",
 		blockchainSubdomain:  "fantom-mainnet",
-		elapsedTime:          0.20045,
 		origin:               "https://app.test1.io",
+		elapsedTime:          0.20045,
 	},
 	{
-		applicationPublicKey: "test_244e2ede722d756188316196fbf1018dbec087f6caee76bb4bc2861d46c",
+		applicationPublicKey: "12345244e2ede722d756188316196fbf1018dbec087f6caee76bb4bc2861d46c",
 		nodePublicKey:        "test_node_pub_key_abfe693936a467d31e3246e32939ec04f5509315f39ef1",
 		method:               "eth_getBlockByNumber",
 		blockchain:           "49",
 		blockchainSubdomain:  "fantom-mainnet",
-		elapsedTime:          0.0813666666666667,
 		origin:               "https://app.test1.io",
+		elapsedTime:          0.0813666666666667,
 	},
 	{
-		applicationPublicKey: "test_166969ae8263902693c0fc1d3569207a4f6f380d3d4d514e7fd819a69d4",
+		applicationPublicKey: "12345166969ae8263902693c0fc1d3569207a4f6f380d3d4d514e7fd819a69d4",
 		nodePublicKey:        "test_node_pub_key_277ed47d71a69e1aef94f8338f859af46d57840060f17d",
 		method:               "eth_getCode",
 		blockchain:           "3",
 		blockchainSubdomain:  "avax-mainnet",
-		elapsedTime:          0.15785,
 		origin:               "https://app.test2.io",
+		elapsedTime:          0.15785,
 	},
 	{
-		applicationPublicKey: "test_fe0fc623aff8bba4ba1984e0c521c08874c9519cc6dcd518a15dd241f53",
+		applicationPublicKey: "12345fe0fc623aff8bba4ba1984e0c521c08874c9519cc6dcd518a15dd241f53",
 		nodePublicKey:        "test_node_pub_key_f64fe10e37173c0e7117490291c11e81d8851175e7ad4d",
 		method:               "eth_getTransactionCount",
 		blockchain:           "3",
 		blockchainSubdomain:  "avax-mainnet",
-		elapsedTime:          0.054675,
 		origin:               "https://app.test2.io",
+		elapsedTime:          0.054675,
 	},
 	{
-		applicationPublicKey: "test_d9470aef46d0ebd3cb3076f3a5a3228c650e374c69b3665b0e5b0017a69",
+		applicationPublicKey: "12345d9470aef46d0ebd3cb3076f3a5a3228c650e374c69b3665b0e5b0017a69",
 		nodePublicKey:        "test_node_pub_key_498b2b95ba2db09a263314e5fe23ce94fbd555d23578c1",
 		method:               "eth_getStorageAt",
 		blockchain:           "3",
 		blockchainSubdomain:  "avax-mainnet",
-		elapsedTime:          0.1093,
 		origin:               "https://app.test2.io",
+		elapsedTime:          0.1093,
 	},
 	{
-		applicationPublicKey: "test_5d57036c3bb5bd0de0319771cfdb3b2a28d4d64e33a3a23e6dcd6057f55",
+		applicationPublicKey: "123455d57036c3bb5bd0de0319771cfdb3b2a28d4d64e33a3a23e6dcd6057f55",
 		nodePublicKey:        "test_node_pub_key_66b14f98b70d7e77572a6c72db611ebe28cf75d9cf542f",
 		method:               "eth_blockNumber",
 		blockchain:           "4",
 		blockchainSubdomain:  "bsc-mainnet",
-		elapsedTime:          0.2205,
 		origin:               "https://app.test3.io",
+		elapsedTime:          0.2205,
 	},
 	{
-		applicationPublicKey: "test_f9fe17a1f6aaca7fe9df6499e569ae2f4910708f636beb1efa20cebda4d",
+		applicationPublicKey: "12345f9fe17a1f6aaca7fe9df6499e569ae2f4910708f636beb1efa20cebda4d",
 		nodePublicKey:        "test_node_pub_key_b5c0fd8910bb7a121686865407e1a3ba40dcfb700d5e87",
 		method:               "eth_getBalance",
 		blockchain:           "4",
 		blockchainSubdomain:  "bsc-mainnet",
-		elapsedTime:          0.0932,
 		origin:               "https://app.test3.io",
+		elapsedTime:          0.0932,
 	},
 	{
-		applicationPublicKey: "test_019c3f109073c77cd6d8bca9d1ff21b1ad5328ba04a5a610ba1bd72e1c5",
+		applicationPublicKey: "12345019c3f109073c77cd6d8bca9d1ff21b1ad5328ba04a5a610ba1bd72e1c5",
 		nodePublicKey:        "test_node_pub_key_124d8dcca024f05e01fb56c91800480926d62da44b0eee",
 		method:               "eth_blockNumber",
 		blockchain:           "4",
 		blockchainSubdomain:  "bsc-mainnet",
-		elapsedTime:          0.1162,
 		origin:               "https://app.test3.io",
+		elapsedTime:          0.1162,
 	},
 	{
-		applicationPublicKey: "test_46a9d0c7d69ac65ffcd508b068ea2651e5d4bd5f4760bd2643584b9ef6d",
+		applicationPublicKey: "1234546a9d0c7d69ac65ffcd508b068ea2651e5d4bd5f4760bd2643584b9ef6d",
 		nodePublicKey:        "test_node_pub_key_dbd1105f79c1c40c2fc8d8749ea5760700cff6a0504016",
 		method:               "eth_blockNumber",
 		blockchain:           "49",
 		blockchainSubdomain:  "fantom-mainnet",
-		elapsedTime:          0.0814,
 		origin:               "https://app.test1.io",
+		elapsedTime:          0.0814,
 	},
 }
 
-/* Initialize Pocket HTTP DB */
-const (
-	phdBaseURL = "http://localhost:8090"
-	apiKey     = "test_api_key_6789"
-	// connectionString = "postgres://postgres:pgpassword@localhost:5432/postgres?sslmode=disable"
-	testUserID = "test_user_id_0db3b6c631c4"
-)
-
-var (
-	ErrResponseNotOK error = errors.New("Response not OK")
-	testClient             = httpclient.NewClient(httpclient.WithHTTPTimeout(5*time.Second), httpclient.WithRetryCount(0))
-)
-
+// Initializes Pocket HTTP DB with required apps and LBs (will not recreate if they already exist)
 func populatePocketHTTPDB() error {
+	existingApps, err := get[[]repository.Application](phdBaseURL, "application", "", "")
+	if err != nil {
+		return err
+	}
+	existingLBs, err := get[[]repository.LoadBalancer](phdBaseURL, "load_balancer", "", "")
+	if err != nil {
+		return err
+	}
+	existingAppNames := []string{}
+	for _, app := range existingApps {
+		existingAppNames = append(existingAppNames, app.Name)
+	}
+	existingLBNames := []string{}
+	for _, lb := range existingLBs {
+		existingLBNames = append(existingLBNames, lb.Name)
+	}
+
 	for i, application := range testRelays {
 		/* Create Application -> POST /application */
-		appInput := fmt.Sprintf(applicationJSON, i+1, testUserID, application.applicationPublicKey)
-		createdApplication, err := postToPHD[repository.Application]("application", []byte(appInput))
-		if err != nil {
-			return err
+		var createdAppID string
+		if !stringUtils.ExactContains(existingAppNames, fmt.Sprintf("test-application-%d", i+1)) {
+			appInput := fmt.Sprintf(applicationJSON, i+1, testUserID, application.applicationPublicKey)
+			createdApplication, err := post[repository.Application](phdBaseURL, "application", []byte(appInput))
+			if err != nil {
+				return err
+			}
+			createdAppID = createdApplication.ID
 		}
 
 		/* Create Load Balancer -> POST /load_balancer */
-		loadBalancerInput := fmt.Sprintf(loadBalancerJSON, i+1, testUserID, createdApplication.ID)
-		_, err = postToPHD[repository.LoadBalancer]("load_balancer", []byte(loadBalancerInput))
-		if err != nil {
-			return err
+		if !stringUtils.ExactContains(existingLBNames, fmt.Sprintf("test-load-balancer-%d", i+1)) {
+			loadBalancerInput := fmt.Sprintf(loadBalancerJSON, i+1, testUserID, createdAppID)
+			_, err = post[repository.LoadBalancer](phdBaseURL, "load_balancer", []byte(loadBalancerInput))
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-// Sends a POST request to PHD to populate the test Portal DB
-func postToPHD[T any](path string, postData []byte) (T, error) {
+// POST test util func
+func post[T any](baseURL, path string, postData []byte) (T, error) {
 	var data T
 
-	rawURL := fmt.Sprintf("%s/%s", phdBaseURL, path)
+	rawURL := fmt.Sprintf("%s/%s", baseURL, path)
 
 	headers := http.Header{
 		"Authorization": {apiKey},
@@ -548,14 +702,14 @@ func startOfDay(day time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, l)
 }
 
-/* Test API Server */
-const relayMeterBaseURL = "http://localhost:9898"
-
-// Sends a POST request to PHD to populate the test Portal DB
-func getRelayMeter[T any](path, param string) (T, error) {
-	rawURL := fmt.Sprintf("%s/v0/%s", relayMeterBaseURL, path)
-	if param != "" {
-		rawURL = fmt.Sprintf("%s/%s", rawURL, param)
+// GET test util func
+func get[T any](baseURL, path, id, params string) (T, error) {
+	rawURL := fmt.Sprintf("%s/%s", baseURL, path)
+	if id != "" {
+		rawURL = fmt.Sprintf("%s/%s", rawURL, id)
+	}
+	if params != "" {
+		rawURL = fmt.Sprintf("%s%s", rawURL, params)
 	}
 
 	headers := http.Header{"Authorization": {apiKey}}

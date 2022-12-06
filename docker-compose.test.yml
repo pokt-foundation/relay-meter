@@ -1,7 +1,7 @@
 version: "3.5"
 
 services:
-# Relay Meter Containers
+  # Relay Meter Containers
   relay-meter-collector:
     build:
       context: .
@@ -12,10 +12,10 @@ services:
       INFLUXDB_URL: http://influxdb:8086
       INFLUXDB_TOKEN: mytoken
       INFLUXDB_ORG: myorg
-      INFLUXDB_BUCKET_DAILY: mainnetRelay
-      INFLUXDB_BUCKET_CURRENT: mainnetRelay
-      INFLUXDB_ORIGIN_BUCKET_DAILY: mainnetRelay
-      INFLUXDB_ORIGIN_BUCKET_CURRENT: mainnetRelay
+      INFLUXDB_BUCKET_DAILY: mainnetRelayApp1d
+      INFLUXDB_BUCKET_CURRENT: mainnetRelayApp10m
+      INFLUXDB_ORIGIN_BUCKET_DAILY: mainnetOrigin1d
+      INFLUXDB_ORIGIN_BUCKET_CURRENT: mainnetOrigin60m
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pgpassword
       POSTGRES_DB: postgres
@@ -82,7 +82,6 @@ services:
         condition: service_healthy
       portal-db:
         condition: service_healthy
-
 
   relay-meter-db:
     image: postgres
