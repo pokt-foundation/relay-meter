@@ -135,7 +135,7 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	  |> keep(columns: ["applicationPublicKey", "result", "_value"])
 	  |> group(columns: ["applicationPublicKey", "result"])
 	  |> sum()`
-	fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, startOfDay(time.Now()).Format(time.RFC3339))
+	fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, startOfDay(time.Now().UTC()).Format(time.RFC3339))
 
 	result, err := queryAPI.Query(context.Background(), fluxQuery)
 	if err != nil {
@@ -257,8 +257,8 @@ func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 	oneDayAgo := time.Now().AddDate(0, 0, -1).Format(time.RFC3339)
 
 	queryString := `from(bucket: %q)
-	  |> range(start: %s)
-	  |> filter(fn: (r) => r["_measurement"] == "relay")
+	|> range(start: %s)
+	|> filter(fn: (r) => r["_measurement"] == "relay")
 	  |> filter(fn: (r) => r["_field"] == "elapsedTime")
 	  |> group(columns: ["host", "applicationPublicKey", "region", "result", "method"])
 	  |> keep(columns: ["applicationPublicKey", "_time", "_value"])
