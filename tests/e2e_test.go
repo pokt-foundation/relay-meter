@@ -453,7 +453,7 @@ func initInfluxTasks(tasksAPI influxAPI.TasksAPI, orgID string, c *require.Asser
 	return tasks
 }
 
-// Saves a test batch of relays to the InfxluDB mainBucket
+// Saves a test batch of relays to the InfluxDB mainBucket
 func populateInfluxRelays(writeAPI influxAPI.WriteAPI, date time.Time, numberOfRelays int) {
 	timestampInterval := (24 * time.Hour) / time.Duration(numberOfRelays)
 
@@ -512,7 +512,7 @@ func populateInfluxRelays(writeAPI influxAPI.WriteAPI, date time.Time, numberOfR
 	writeAPI.Flush()
 }
 
-// Selection of relays to populate the test InfluxDB (randomly selected from this slice inside populateInfluxRelays)
+// Selection of relays to populate the test InfluxDB (selected from this slice inside populateInfluxRelays)
 var testRelays = []struct {
 	applicationPublicKey,
 	nodePublicKey,
