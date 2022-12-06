@@ -28,7 +28,7 @@ const (
 
 var (
 	ctx               = context.Background()
-	today             = startOfDay(time.Now())
+	today             = startOfDay(time.Now().UTC().AddDate(0, 0, 1))
 	todayFormatted    = today.Format(time.RFC3339)
 	endOfDayFormatted = today.AddDate(0, 0, 1).Format(time.RFC3339)
 	influxOptions     = db.InfluxDBOptions{
