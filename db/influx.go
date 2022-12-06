@@ -255,7 +255,6 @@ func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 
 	// TODO: send queries in parallel
 	oneDayAgo := time.Now().Add(-time.Hour * 24).Format(time.RFC3339)
-
 	queryString := `from(bucket: %q)
 	  |> range(start: %s)
 	  |> filter(fn: (r) => r["_measurement"] == "relay")
