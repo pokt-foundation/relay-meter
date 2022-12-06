@@ -29,8 +29,8 @@ const (
 var (
 	ctx               = context.Background()
 	today             = startOfDay(time.Now())
-	todayFormatted    = today.AddDate(0, 0, -2).Format(time.RFC3339)
-	endOfDayFormatted = today.AddDate(0, 0, 2).Format(time.RFC3339)
+	todayFormatted    = today.Format(time.RFC3339)
+	endOfDayFormatted = today.AddDate(0, 0, 1).Format(time.RFC3339)
 	influxOptions     = db.InfluxDBOptions{
 		URL:                 "http://localhost:8086",
 		Token:               "mytoken",
@@ -155,6 +155,26 @@ func Test_RelayMeter_E2E(t *testing.T) {
 					}
 				}
 			}
+
+			/* Test API Server */
+			// relays
+			path := fmt.Sprintf("relays?from=%s&to=%s", todayFormatted, endOfDayFormatted)
+			test, err := getRelayMeter[any](path, "")
+			c.NoError(err)
+
+			fmt.Println("ERROR", err)
+			PrettyString("TEST", test)
+
+			// TODO - test all of these
+			// relays/apps
+			// relays/apps
+			// relays/users
+			// relays/endpoints
+			// relays/endpoints
+			// relays/origin-classification
+			// relays/origin-classification
+			// latency/apps
+			// latency/apps
 		})
 	}
 
@@ -526,4 +546,41 @@ func startOfDay(day time.Time) time.Time {
 	l := day.Location()
 
 	return time.Date(y, m, d, 0, 0, 0, 0, l)
+}
+
+/* Test API Server */
+const relayMeterBaseURL = "http://localhost:9898"
+
+// Sends a POST request to PHD to populate the test Portal DB
+func getRelayMeter[T any](path, param string) (T, error) {
+	rawURL := fmt.Sprintf("%s/v0/%s", relayMeterBaseURL, path)
+	if param != "" {
+		rawURL = fmt.Sprintf("%s/%s", rawURL, param)
+	}
+
+	headers := http.Header{"Authorization": {apiKey}}
+
+	var data T
+
+	response, err := testClient.Get(rawURL, headers)
+	if err != nil {
+		return data, err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return data, fmt.Errorf("%w. %s", ErrResponseNotOK, http.StatusText(response.StatusCode))
+	}
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return data, err
+	}
+
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return data, err
+	}
+
+	return data, nil
 }
