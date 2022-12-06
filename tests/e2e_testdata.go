@@ -47,7 +47,7 @@ var (
 	// Test HTTP client
 	testClient = httpclient.NewClient(httpclient.WithHTTPTimeout(5*time.Second), httpclient.WithRetryCount(0))
 	// Test errors
-	ErrResponseNotOK = errors.New("Response not OK")
+	errResponseNotOK = errors.New("Response not OK")
 
 	// Selection of relays to populate the test InfluxDB (selected from this slice inside populateInfluxRelays)
 	testRelays = []struct {
@@ -460,7 +460,7 @@ func post[T any](baseURL, path string, postData []byte) (T, error) {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return data, fmt.Errorf("%w. %s", ErrResponseNotOK, http.StatusText(response.StatusCode))
+		return data, fmt.Errorf("%w. %s", errResponseNotOK, http.StatusText(response.StatusCode))
 	}
 
 	body, err := io.ReadAll(response.Body)
@@ -497,7 +497,7 @@ func get[T any](baseURL, path, id, params string) (T, error) {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return data, fmt.Errorf("%w. %s", ErrResponseNotOK, http.StatusText(response.StatusCode))
+		return data, fmt.Errorf("%w. %s", errResponseNotOK, http.StatusText(response.StatusCode))
 	}
 
 	body, err := io.ReadAll(response.Body)
