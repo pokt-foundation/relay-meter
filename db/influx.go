@@ -11,7 +11,7 @@ import (
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/pokt-foundation/utils-go/numbers"
 
-	"github.com/adshmh/meter/api"
+	"github.com/pokt-foundation/relay-meter/api"
 )
 
 type Source interface {

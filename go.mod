@@ -1,4 +1,4 @@
-module github.com/adshmh/meter
+module github.com/pokt-foundation/relay-meter
 
 go 1.18
 

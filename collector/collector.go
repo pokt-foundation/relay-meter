@@ -8,7 +8,7 @@ import (
 
 	logger "github.com/sirupsen/logrus"
 
-	"github.com/adshmh/meter/api"
+	"github.com/pokt-foundation/relay-meter/api"
 )
 
 const (

@@ -13,12 +13,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/adshmh/meter/db"
 	"github.com/gojektech/heimdall/httpclient"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	influxDomain "github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/pokt-foundation/portal-api-go/repository"
+	"github.com/pokt-foundation/relay-meter/db"
 	stringUtils "github.com/pokt-foundation/utils-go/strings"
+	"github.com/stretchr/testify/suite"
 )
 
 var (
@@ -27,22 +28,22 @@ var (
 )
 
 // TODO move this to utils-go
-func startOfDay(day time.Time) time.Time {
-	y, m, d := day.Date()
-	l := day.Location()
-
-	return time.Date(y, m, d, 0, 0, 0, 0, l)
+func startOfDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
 type (
-	TestClient struct {
+	RelayMeterTestSuite struct {
+		suite.Suite
 		Source               db.Source
 		TestRelays           []TestRelay
 		influxClient         influxdb2.Client
 		httpClient           *httpclient.Client
 		tasks                []*influxDomain.Task
 		startOfDay, endOfDay time.Time
+		dateParams           string
 		orgID                string
+		testEndpointID       string
 		options              TestClientOptions
 	}
 	TestClientOptions struct {
@@ -62,36 +63,39 @@ type (
 	}
 )
 
-func NewTestClient(options TestClientOptions) (*TestClient, error) {
+func (ts *RelayMeterTestSuite) SetupSuite() {
 	startOfDay := startOfDay(time.Now().UTC())
 	endOfDay := startOfDay.AddDate(0, 0, 1).Add(-time.Millisecond)
+	ts.startOfDay = startOfDay
+	ts.endOfDay = endOfDay
+	ts.dateParams = fmt.Sprintf("?from=%s&to=%s", startOfDay.Format(time.RFC3339), endOfDay.Format(time.RFC3339))
 
-	testClient := TestClient{options: options, startOfDay: startOfDay, endOfDay: endOfDay}
+	err := ts.initInflux()
+	ts.NoError(err)
 
-	/* Set up TestClient struct */
-	err := testClient.initInflux()
-	if err != nil {
-		return nil, err
-	}
-	testClient.resetInfluxBuckets()
-	err = testClient.initInfluxTasks()
-	if err != nil {
-		return nil, err
-	}
-	err = testClient.getTestRelays()
-	if err != nil {
-		return nil, err
-	}
-	testClient.Source = db.NewInfluxDBSource(options.InfluxDBOptions)
-	testClient.httpClient = httpclient.NewClient(httpclient.WithHTTPTimeout(5*time.Second), httpclient.WithRetryCount(0))
+	ts.resetInfluxBuckets()
+	err = ts.initInfluxTasks()
+	ts.NoError(err)
 
-	return &testClient, nil
+	err = ts.getTestRelays()
+	ts.NoError(err)
+
+	ts.Source = db.NewInfluxDBSource(ts.options.InfluxDBOptions)
+	ts.httpClient = httpclient.NewClient(httpclient.WithHTTPTimeout(5*time.Second), httpclient.WithRetryCount(0))
+
+	/* Populate the databases */
+	ts.populatePocketHTTPDB()
+	ts.populateInfluxRelays()
+	/* Manually run the Influx tasks to populate time scale buckets from main bucket */
+	ts.runInfluxTasks()
+
+	time.Sleep(30 * time.Second) // Wait for collector to run and write to Postgres
 }
 
 // Initializes the Influx client and returns it alongside the org ID
-func (c *TestClient) initInflux() error {
+func (ts *RelayMeterTestSuite) initInflux() error {
 	influxClient := influxdb2.NewClientWithOptions(
-		c.options.URL, c.options.Token,
+		ts.options.URL, ts.options.Token,
 		influxdb2.DefaultOptions().SetBatchSize(4_000),
 	)
 	health, err := influxClient.Health(context.Background())
@@ -101,36 +105,36 @@ func (c *TestClient) initInflux() error {
 	if *health.Message != "ready for queries and writes" {
 		return errors.New("test influx client is unhealthy")
 	}
-	c.influxClient = influxClient
+	ts.influxClient = influxClient
 
-	dOrg, err := influxClient.OrganizationsAPI().FindOrganizationByName(context.Background(), c.options.Org)
+	dOrg, err := influxClient.OrganizationsAPI().FindOrganizationByName(context.Background(), ts.options.Org)
 	if err != nil {
 		return err
 	}
-	c.orgID = *dOrg.Id
+	ts.orgID = *dOrg.Id
 
 	return nil
 }
 
 // Resets the Influx bucket each time the collector test runs
-func (c *TestClient) resetInfluxBuckets() error {
-	bucketsAPI := c.influxClient.BucketsAPI()
+func (ts *RelayMeterTestSuite) resetInfluxBuckets() error {
+	bucketsAPI := ts.influxClient.BucketsAPI()
 	usedBuckets := []string{
-		c.options.mainBucket,
-		c.options.main1mBucket,
-		c.options.CurrentBucket,
-		c.options.CurrentOriginBucket,
+		ts.options.mainBucket,
+		ts.options.main1mBucket,
+		ts.options.CurrentBucket,
+		ts.options.CurrentOriginBucket,
 	}
 
 	for _, bucketName := range usedBuckets {
 		bucket, err := bucketsAPI.FindBucketByName(ctx, bucketName)
 		if err == nil {
-			err = c.influxClient.BucketsAPI().DeleteBucketWithID(ctx, *bucket.Id)
+			err = ts.influxClient.BucketsAPI().DeleteBucketWithID(ctx, *bucket.Id)
 			if err != nil {
 				return err
 			}
 		}
-		_, err = c.influxClient.BucketsAPI().CreateBucketWithNameWithID(ctx, c.orgID, bucketName)
+		_, err = ts.influxClient.BucketsAPI().CreateBucketWithNameWithID(ctx, ts.orgID, bucketName)
 		if err != nil {
 			return err
 		}
@@ -140,14 +144,14 @@ func (c *TestClient) resetInfluxBuckets() error {
 }
 
 // Initializes the Influx tasks used to populate each bucket from the main bucket
-func (c *TestClient) initInfluxTasks() error {
-	tasksAPI := c.influxClient.TasksAPI()
+func (ts *RelayMeterTestSuite) initInfluxTasks() error {
+	tasksAPI := ts.influxClient.TasksAPI()
 
-	startOfDayFormatted, endOfDayFormatted := c.startOfDay.Format(time.RFC3339), c.endOfDay.Format(time.RFC3339)
+	startOfDayFormatted, endOfDayFormatted := ts.startOfDay.Format(time.RFC3339), ts.endOfDay.Format(time.RFC3339)
 	tasksToInit := map[string]string{
-		"app-1m":            fmt.Sprintf(app1mStringRaw, c.options.mainBucket, startOfDayFormatted, endOfDayFormatted, c.options.main1mBucket),
-		"app-10m":           fmt.Sprintf(app10mStringRaw, c.options.main1mBucket, startOfDayFormatted, endOfDayFormatted, c.options.CurrentBucket),
-		"origin-sample-60m": fmt.Sprintf(origin60mStringRaw, c.options.mainBucket, startOfDayFormatted, endOfDayFormatted, c.options.CurrentOriginBucket),
+		"app-1m":            fmt.Sprintf(app1mStringRaw, ts.options.mainBucket, startOfDayFormatted, endOfDayFormatted, ts.options.main1mBucket),
+		"app-10m":           fmt.Sprintf(app10mStringRaw, ts.options.main1mBucket, startOfDayFormatted, endOfDayFormatted, ts.options.CurrentBucket),
+		"origin-sample-60m": fmt.Sprintf(origin60mStringRaw, ts.options.mainBucket, startOfDayFormatted, endOfDayFormatted, ts.options.CurrentOriginBucket),
 	}
 
 	existingTasks, err := tasksAPI.FindTasks(ctx, nil)
@@ -166,7 +170,7 @@ func (c *TestClient) initInfluxTasks() error {
 			}
 		}
 
-		task, err := tasksAPI.CreateTaskWithEvery(ctx, taskName, fluxTask, "1h", c.orgID)
+		task, err := tasksAPI.CreateTaskWithEvery(ctx, taskName, fluxTask, "1h", ts.orgID)
 		if err != nil {
 			return err
 		}
@@ -174,11 +178,11 @@ func (c *TestClient) initInfluxTasks() error {
 		tasks = append(tasks, task)
 	}
 
-	c.tasks = tasks
+	ts.tasks = tasks
 	return nil
 }
 
-func (c *TestClient) getTestRelays() error {
+func (ts *RelayMeterTestSuite) getTestRelays() error {
 	file, err := ioutil.ReadFile("../testdata/mock_relays.json")
 	if err != nil {
 		return err
@@ -189,22 +193,24 @@ func (c *TestClient) getTestRelays() error {
 		return err
 	}
 
-	c.TestRelays = testRelays
+	ts.TestRelays = testRelays
 
 	return nil
 }
 
 // Saves a test batch of relays to the InfluxDB mainBucket
-func (c *TestClient) PopulateInfluxRelays(date time.Time, numberOfRelays int) error {
+func (ts *RelayMeterTestSuite) populateInfluxRelays() error {
+	numberOfRelays := 100_000
+
 	timestampInterval := (24 * time.Hour) / time.Duration(numberOfRelays)
 
-	writeAPI := c.influxClient.WriteAPI(c.options.Org, c.options.mainBucket)
+	writeAPI := ts.influxClient.WriteAPI(ts.options.Org, ts.options.mainBucket)
 
 	for i := 0; i < numberOfRelays; i++ {
 		index := i % 10
-		relay := c.TestRelays[index]
+		relay := ts.TestRelays[index]
 
-		relayTimestamp := date.Add(timestampInterval * time.Duration(i+1))
+		relayTimestamp := ts.startOfDay.Add(timestampInterval * time.Duration(i+1))
 		if i == 0 {
 			relayTimestamp.Add(time.Millisecond * 10)
 		}
@@ -257,28 +263,13 @@ func (c *TestClient) PopulateInfluxRelays(date time.Time, numberOfRelays int) er
 	return nil
 }
 
-// Manually runs the Influx tasks (takes around 30 seconds as it must wait for tasks to complete)
-func (c *TestClient) RunInfluxTasks() error {
-	tasksAPI := c.influxClient.TasksAPI()
-
-	for _, task := range c.tasks {
-		_, err := tasksAPI.RunManually(ctx, task)
-		if err != nil {
-			return err
-		}
-		time.Sleep(10 * time.Second) // Wait for task to complete
-	}
-
-	return nil
-}
-
 // Initializes Pocket HTTP DB with required apps and LBs (will not recreate if they already exist)
-func (c *TestClient) PopulatePocketHTTPDB() error {
-	existingApps, err := get[[]repository.Application](c.options.phdBaseURL, "application", "", "", c.options.phdAPIKey, c.httpClient)
+func (ts *RelayMeterTestSuite) populatePocketHTTPDB() error {
+	existingApps, err := get[[]repository.Application](ts.options.phdBaseURL, "application", "", "", ts.options.phdAPIKey, ts.httpClient)
 	if err != nil {
 		return err
 	}
-	existingLBs, err := get[[]repository.LoadBalancer](c.options.phdBaseURL, "load_balancer", "", "", c.options.phdAPIKey, c.httpClient)
+	existingLBs, err := get[[]repository.LoadBalancer](ts.options.phdBaseURL, "load_balancer", "", "", ts.options.phdAPIKey, ts.httpClient)
 	if err != nil {
 		return err
 	}
@@ -291,12 +282,12 @@ func (c *TestClient) PopulatePocketHTTPDB() error {
 		existingLBNames = append(existingLBNames, lb.Name)
 	}
 
-	for i, application := range c.TestRelays {
+	for i, application := range ts.TestRelays {
 		/* Create Application -> POST /application */
 		var createdAppID string
 		if !stringUtils.ExactContains(existingAppNames, fmt.Sprintf("test-application-%d", i+1)) {
-			appInput := fmt.Sprintf(applicationJSON, i+1, c.options.testUserID, application.ApplicationPublicKey)
-			createdApplication, err := post[repository.Application](c.options.phdBaseURL, "application", c.options.phdAPIKey, []byte(appInput), c.httpClient)
+			appInput := fmt.Sprintf(applicationJSON, i+1, ts.options.testUserID, application.ApplicationPublicKey)
+			createdApplication, err := post[repository.Application](ts.options.phdBaseURL, "application", ts.options.phdAPIKey, []byte(appInput), ts.httpClient)
 			if err != nil {
 				return err
 			}
@@ -305,12 +296,27 @@ func (c *TestClient) PopulatePocketHTTPDB() error {
 
 		/* Create Load Balancer -> POST /load_balancer */
 		if !stringUtils.ExactContains(existingLBNames, fmt.Sprintf("test-load-balancer-%d", i+1)) {
-			loadBalancerInput := fmt.Sprintf(loadBalancerJSON, i+1, c.options.testUserID, createdAppID)
-			_, err = post[repository.LoadBalancer](c.options.phdBaseURL, "load_balancer", c.options.phdAPIKey, []byte(loadBalancerInput), c.httpClient)
+			loadBalancerInput := fmt.Sprintf(loadBalancerJSON, i+1, ts.options.testUserID, createdAppID)
+			_, err = post[repository.LoadBalancer](ts.options.phdBaseURL, "load_balancer", ts.options.phdAPIKey, []byte(loadBalancerInput), ts.httpClient)
 			if err != nil {
 				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+// Manually runs the Influx tasks (takes around 30 seconds as it must wait for tasks to complete)
+func (ts *RelayMeterTestSuite) runInfluxTasks() error {
+	tasksAPI := ts.influxClient.TasksAPI()
+
+	for _, task := range ts.tasks {
+		_, err := tasksAPI.RunManually(ctx, task)
+		if err != nil {
+			return err
+		}
+		time.Sleep(10 * time.Second) // Wait for task to complete
 	}
 
 	return nil

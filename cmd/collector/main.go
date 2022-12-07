@@ -9,9 +9,9 @@ import (
 	"github.com/pokt-foundation/utils-go/environment"
 	logger "github.com/sirupsen/logrus"
 
-	"github.com/adshmh/meter/cmd"
-	"github.com/adshmh/meter/collector"
-	"github.com/adshmh/meter/db"
+	"github.com/pokt-foundation/relay-meter/cmd"
+	"github.com/pokt-foundation/relay-meter/collector"
+	"github.com/pokt-foundation/relay-meter/db"
 )
 
 const (
