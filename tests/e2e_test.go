@@ -17,9 +17,7 @@ var testSuiteOptions = TestClientOptions{
 		URL:                 "http://localhost:8086",
 		Token:               "mytoken",
 		Org:                 "myorg",
-		DailyBucket:         "mainnetRelayApp1d",
 		CurrentBucket:       "mainnetRelayApp10m",
-		DailyOriginBucket:   "mainnetOrigin1d",
 		CurrentOriginBucket: "mainnetOrigin60m",
 	},
 	mainBucket:        "mainnetRelay",
@@ -45,7 +43,7 @@ It follows the flow:
 The test verifies this data by verifying it can be accessed from the API server's endpoints. */
 
 // Sets up the suite (~1 minute due to need for Influx tasks and Collector to run) and runs all the tests.
-func TestE2E_RunSuite(t *testing.T) {
+func Test_RunSuite_E2E(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping end to end test")
 	}
@@ -187,7 +185,7 @@ func (ts *RelayMeterTestSuite) Test_AllLoadBalancerRelaysEndpoint() {
 		}
 
 		// Must get created endpoint ID  for next test
-		ts.testEndpointID = allEndpointsRelays[0].Endpoint
+		ts.testLBID = allEndpointsRelays[0].Endpoint
 	}
 }
 
@@ -205,7 +203,7 @@ func (ts *RelayMeterTestSuite) Test_LoadBalancerRelaysEndpoint() {
 	}
 
 	for _, test := range tests {
-		endpointRelays, err := get[api.LoadBalancerRelaysResponse](ts.options.relayMeterBaseURL, "v0/relays/endpoints", ts.testEndpointID, ts.dateParams, "", ts.httpClient)
+		endpointRelays, err := get[api.LoadBalancerRelaysResponse](ts.options.relayMeterBaseURL, "v0/relays/endpoints", ts.testLBID, ts.dateParams, "", ts.httpClient)
 		ts.Equal(test.err, err)
 		ts.Len(endpointRelays.Endpoint, 24)
 		ts.Len(endpointRelays.Applications, 1)

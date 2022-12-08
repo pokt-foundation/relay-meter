@@ -10,7 +10,7 @@ test_env_down:
 run_integration_tests:
 	-go test ./... -run Integration -count=1;
 run_e2e_tests:
-	-go test ./... -run E2E -count=1;
+	-go test ./... -run E2E -count=1 -tags=tests;
 run_all_tests:
 	-go test ./... -count=1;
 

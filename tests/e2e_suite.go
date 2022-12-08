@@ -15,7 +15,6 @@ import (
 
 	"github.com/gojektech/heimdall/httpclient"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	influxDomain "github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/pokt-foundation/portal-api-go/repository"
 	"github.com/pokt-foundation/relay-meter/db"
 	stringUtils "github.com/pokt-foundation/utils-go/strings"
@@ -31,16 +30,12 @@ var (
 type (
 	RelayMeterTestSuite struct {
 		suite.Suite
-		Source               db.Source
-		TestRelays           []TestRelay
-		influxClient         influxdb2.Client
-		httpClient           *httpclient.Client
-		tasks                []*influxDomain.Task
-		startOfDay, endOfDay time.Time
-		dateParams           string
-		orgID                string
-		testEndpointID       string
-		options              TestClientOptions
+		TestRelays                  [10]TestRelay
+		influxClient                influxdb2.Client
+		httpClient                  *httpclient.Client
+		startOfDay, endOfDay        time.Time
+		dateParams, orgID, testLBID string
+		options                     TestClientOptions
 	}
 	TestClientOptions struct {
 		db.InfluxDBOptions
@@ -59,33 +54,36 @@ type (
 	}
 )
 
+// SetupSuite runs before each test suite run - takes just over 1 minute to complete
 func (ts *RelayMeterTestSuite) SetupSuite() {
+	ts.configureTimePeriod() // Configure time period for test
+
+	err := ts.initInflux() // Setup Influx client to interact with Influx DB
+	ts.NoError(err)
+	ts.resetInfluxBuckets() // Ensure Influx buckets are empty at start of test
+
+	err = ts.getTestRelays() // Marshals test relay JSON to array of structs
+	ts.NoError(err)
+
+	ts.httpClient = httpclient.NewClient( // HTTP client to test API Server and populate PHD DB
+		httpclient.WithHTTPTimeout(5*time.Second), httpclient.WithRetryCount(0),
+	)
+
+	ts.populatePocketHTTPDB() // Populate PHD/Postgres
+	ts.populateInfluxRelays() // Populate Influx DB with 100,000 relays
+	err = ts.runInfluxTasks() // Manually run the Influx tasks (takes ~30 seconds)
+	ts.NoError(err)
+
+	time.Sleep(30 * time.Second) // Wait 30 seconds for collector to run and write to Postgres
+}
+
+// Sets the time period vars for the test (00:00.000 to 23:59:59.999 UTC of current day)
+func (ts *RelayMeterTestSuite) configureTimePeriod() {
 	startOfDay := timeUtils.StartOfDay(time.Now().UTC())
 	endOfDay := startOfDay.AddDate(0, 0, 1).Add(-time.Millisecond)
 	ts.startOfDay = startOfDay
 	ts.endOfDay = endOfDay
 	ts.dateParams = fmt.Sprintf("?from=%s&to=%s", startOfDay.Format(time.RFC3339), endOfDay.Format(time.RFC3339))
-
-	err := ts.initInflux()
-	ts.NoError(err)
-
-	ts.resetInfluxBuckets()
-	err = ts.initInfluxTasks()
-	ts.NoError(err)
-
-	err = ts.getTestRelays()
-	ts.NoError(err)
-
-	ts.Source = db.NewInfluxDBSource(ts.options.InfluxDBOptions)
-	ts.httpClient = httpclient.NewClient(httpclient.WithHTTPTimeout(5*time.Second), httpclient.WithRetryCount(0))
-
-	/* Populate the databases */
-	ts.populatePocketHTTPDB()
-	ts.populateInfluxRelays()
-	/* Manually run the Influx tasks to populate time scale buckets from main bucket */
-	ts.runInfluxTasks()
-
-	time.Sleep(30 * time.Second) // Wait for collector to run and write to Postgres
 }
 
 // Initializes the Influx client and returns it alongside the org ID
@@ -94,7 +92,7 @@ func (ts *RelayMeterTestSuite) initInflux() error {
 		ts.options.URL, ts.options.Token,
 		influxdb2.DefaultOptions().SetBatchSize(4_000),
 	)
-	health, err := influxClient.Health(context.Background())
+	health, err := influxClient.Health(ctx)
 	if err != nil {
 		return err
 	}
@@ -103,7 +101,7 @@ func (ts *RelayMeterTestSuite) initInflux() error {
 	}
 	ts.influxClient = influxClient
 
-	dOrg, err := influxClient.OrganizationsAPI().FindOrganizationByName(context.Background(), ts.options.Org)
+	dOrg, err := influxClient.OrganizationsAPI().FindOrganizationByName(ctx, ts.options.Org)
 	if err != nil {
 		return err
 	}
@@ -140,7 +138,7 @@ func (ts *RelayMeterTestSuite) resetInfluxBuckets() error {
 }
 
 // Initializes the Influx tasks used to populate each bucket from the main bucket
-func (ts *RelayMeterTestSuite) initInfluxTasks() error {
+func (ts *RelayMeterTestSuite) runInfluxTasks() error {
 	tasksAPI := ts.influxClient.TasksAPI()
 
 	startOfDayFormatted, endOfDayFormatted := ts.startOfDay.Format(time.RFC3339), ts.endOfDay.Format(time.RFC3339)
@@ -155,7 +153,6 @@ func (ts *RelayMeterTestSuite) initInfluxTasks() error {
 		return err
 	}
 
-	tasks := []*influxDomain.Task{}
 	for taskName, fluxTask := range tasksToInit {
 		for _, existingTask := range existingTasks {
 			if existingTask.Name == taskName {
@@ -171,19 +168,23 @@ func (ts *RelayMeterTestSuite) initInfluxTasks() error {
 			return err
 		}
 
-		tasks = append(tasks, task)
+		_, err = tasksAPI.RunManually(ctx, task)
+		if err != nil {
+			return err
+		}
+		time.Sleep(10 * time.Second) // Wait for task to complete
 	}
 
-	ts.tasks = tasks
 	return nil
 }
 
+// Gets the test relays JSON from the testdata directory
 func (ts *RelayMeterTestSuite) getTestRelays() error {
 	file, err := ioutil.ReadFile("../testdata/mock_relays.json")
 	if err != nil {
 		return err
 	}
-	testRelays := []TestRelay{}
+	testRelays := [10]TestRelay{}
 	err = json.Unmarshal([]byte(file), &testRelays)
 	if err != nil {
 		return err
@@ -230,7 +231,6 @@ func (ts *RelayMeterTestSuite) populateInfluxRelays() error {
 				"result":               result,
 				"blockchain":           relay.Blockchain,
 				"blockchainSubdomain":  relay.BlockchainSubdomain,
-				"host":                 "test_0bc93fa",
 				"region":               "us-east-2",
 			},
 			map[string]interface{}{
@@ -298,21 +298,6 @@ func (ts *RelayMeterTestSuite) populatePocketHTTPDB() error {
 				return err
 			}
 		}
-	}
-
-	return nil
-}
-
-// Manually runs the Influx tasks (takes around 30 seconds as it must wait for tasks to complete)
-func (ts *RelayMeterTestSuite) runInfluxTasks() error {
-	tasksAPI := ts.influxClient.TasksAPI()
-
-	for _, task := range ts.tasks {
-		_, err := tasksAPI.RunManually(ctx, task)
-		if err != nil {
-			return err
-		}
-		time.Sleep(10 * time.Second) // Wait for task to complete
 	}
 
 	return nil
@@ -397,8 +382,9 @@ func get[T any](baseURL, path, id, params, apiKey string, httpClient *httpclient
 	return data, nil
 }
 
+// These Flux & JSON strings must have values filled in programmatically so must be saved here in the Go file
 const (
-	// Influx Tasks
+	// Influx Tasks Flux
 	app1mStringRaw = `from(bucket: "%s")
 	|> range(start: %s, stop: %s)
 	|> filter(fn: (r) => r._field == "elapsedTime" and (r.method != "chaincheck" and r.method != "synccheck"))
@@ -458,7 +444,7 @@ const (
 		fieldFn: (r) => ({"count": r.count - 1}),
 	)`
 
-	// PHD Test Data
+	// PHD Test Data JSON
 	applicationJSON = `{
 		"name": "test-application-%d",
 		"userID": "%s",
