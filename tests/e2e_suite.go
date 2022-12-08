@@ -19,6 +19,7 @@ import (
 	"github.com/pokt-foundation/portal-api-go/repository"
 	"github.com/pokt-foundation/relay-meter/db"
 	stringUtils "github.com/pokt-foundation/utils-go/strings"
+	timeUtils "github.com/pokt-foundation/utils-go/time"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -26,11 +27,6 @@ var (
 	ctx                    = context.Background()
 	ErrResponseNotOK error = errors.New("Response not OK")
 )
-
-// TODO move this to utils-go
-func startOfDay(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-}
 
 type (
 	RelayMeterTestSuite struct {
@@ -64,7 +60,7 @@ type (
 )
 
 func (ts *RelayMeterTestSuite) SetupSuite() {
-	startOfDay := startOfDay(time.Now().UTC())
+	startOfDay := timeUtils.StartOfDay(time.Now().UTC())
 	endOfDay := startOfDay.AddDate(0, 0, 1).Add(-time.Millisecond)
 	ts.startOfDay = startOfDay
 	ts.endOfDay = endOfDay
