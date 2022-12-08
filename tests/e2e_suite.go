@@ -23,8 +23,9 @@ import (
 )
 
 var (
-	ctx                    = context.Background()
-	ErrResponseNotOK error = errors.New("Response not OK")
+	ctx                      = context.Background()
+	ErrResponseNotOK         = errors.New("Response not OK")
+	ErrInfluxClientUnhealthy = errors.New("test influx client is unhealthy")
 )
 
 type (
@@ -79,11 +80,9 @@ func (ts *RelayMeterTestSuite) SetupSuite() {
 
 // Sets the time period vars for the test (00:00.000 to 23:59:59.999 UTC of current day)
 func (ts *RelayMeterTestSuite) configureTimePeriod() {
-	startOfDay := timeUtils.StartOfDay(time.Now().UTC())
-	endOfDay := startOfDay.AddDate(0, 0, 1).Add(-time.Millisecond)
-	ts.startOfDay = startOfDay
-	ts.endOfDay = endOfDay
-	ts.dateParams = fmt.Sprintf("?from=%s&to=%s", startOfDay.Format(time.RFC3339), endOfDay.Format(time.RFC3339))
+	ts.startOfDay = timeUtils.StartOfDay(time.Now().UTC())
+	ts.endOfDay = ts.startOfDay.AddDate(0, 0, 1).Add(-time.Millisecond)
+	ts.dateParams = fmt.Sprintf("?from=%s&to=%s", ts.startOfDay.Format(time.RFC3339), ts.endOfDay.Format(time.RFC3339))
 }
 
 // Initializes the Influx client and returns it alongside the org ID
@@ -97,7 +96,7 @@ func (ts *RelayMeterTestSuite) initInflux() error {
 		return err
 	}
 	if *health.Message != "ready for queries and writes" {
-		return errors.New("test influx client is unhealthy")
+		return ErrInfluxClientUnhealthy
 	}
 	ts.influxClient = influxClient
 
