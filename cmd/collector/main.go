@@ -27,14 +27,14 @@ const (
 type options struct {
 	collectionInterval int
 	reportingInterval  int
-	maxArchiveAgeDays  time.Duration
+	maxArchiveAge      time.Duration
 }
 
 func gatherOptions() options {
 	return options{
 		collectionInterval: int(environment.GetInt64(collectingIntervalSeconds, defaultCollectIntervalSeconds)),
 		reportingInterval:  int(environment.GetInt64(reportIntervalSeconds, defaultReportIntervalSeconds)),
-		maxArchiveAgeDays:  time.Duration(environment.GetInt64(maxArchiveAgeDays, defaultMaxArchiveAgeDays)) * 24 * time.Hour,
+		maxArchiveAge:      time.Duration(environment.GetInt64(maxArchiveAgeDays, defaultMaxArchiveAgeDays)) * 24 * time.Hour,
 	}
 }
 
@@ -56,6 +56,6 @@ func main() {
 	log := logger.New()
 	log.Formatter = &logger.JSONFormatter{}
 
-	collector := collector.NewCollector(influxClient, pgClient, options.maxArchiveAgeDays, log)
+	collector := collector.NewCollector(influxClient, pgClient, options.maxArchiveAge, log)
 	collector.Start(context.Background(), options.collectionInterval, options.reportingInterval)
 }
