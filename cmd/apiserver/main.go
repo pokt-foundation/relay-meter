@@ -15,9 +15,9 @@ import (
 	"github.com/pokt-foundation/utils-go/environment"
 
 	// TODO: replace with pokt-foundation/relay-meter
-	"github.com/adshmh/meter/api"
-	"github.com/adshmh/meter/cmd"
-	"github.com/adshmh/meter/db"
+	"github.com/pokt-foundation/relay-meter/api"
+	"github.com/pokt-foundation/relay-meter/cmd"
+	"github.com/pokt-foundation/relay-meter/db"
 )
 
 const (

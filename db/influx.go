@@ -10,8 +10,9 @@ import (
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/pokt-foundation/utils-go/numbers"
+	timeUtils "github.com/pokt-foundation/utils-go/time"
 
-	"github.com/adshmh/meter/api"
+	"github.com/pokt-foundation/relay-meter/api"
 )
 
 type Source interface {
@@ -135,7 +136,7 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	  |> keep(columns: ["applicationPublicKey", "result", "_value"])
 	  |> group(columns: ["applicationPublicKey", "result"])
 	  |> sum()`
-	fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, startOfDay(time.Now()).Format(time.RFC3339))
+	fluxQuery := fmt.Sprintf(queryString, i.Options.CurrentBucket, timeUtils.StartOfDay(time.Now()).Format(time.RFC3339))
 
 	result, err := queryAPI.Query(context.Background(), fluxQuery)
 	if err != nil {
@@ -198,7 +199,7 @@ func (i *influxDB) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error) {
 	 |> group(columns: ["origin","result"])
 	 |> sum()
 	`
-	query := fmt.Sprintf(queryString, i.Options.CurrentOriginBucket, startOfDay(time.Now()).Format(time.RFC3339), time.Now().Format(time.RFC3339))
+	query := fmt.Sprintf(queryString, i.Options.CurrentOriginBucket, timeUtils.StartOfDay(time.Now()).Format(time.RFC3339), time.Now().Format(time.RFC3339))
 
 	result, err := queryAPI.Query(context.Background(), query)
 	if err != nil {
@@ -388,14 +389,4 @@ func (i *influxDB) AppRelays(from, to time.Time) (map[string]api.RelayCounts, er
 
 	client.Close()
 	return counts, nil
-}
-
-// startOfDay returns the time matching the start of the day of the input.
-//
-//	timezone/location is maintained.
-func startOfDay(day time.Time) time.Time {
-	y, m, d := day.Date()
-	l := day.Location()
-
-	return time.Date(y, m, d, 0, 0, 0, 0, l)
 }

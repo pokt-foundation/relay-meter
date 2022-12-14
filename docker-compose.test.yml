@@ -1,0 +1,139 @@
+version: "3.5"
+
+services:
+  # Relay Meter Containers
+  relay-meter-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.production.collector
+    container_name: relay-meter-collector
+    restart: always
+    environment:
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_TOKEN: mytoken
+      INFLUXDB_ORG: myorg
+      INFLUXDB_BUCKET_DAILY: mainnetRelayApp1d
+      INFLUXDB_BUCKET_CURRENT: mainnetRelayApp10m
+      INFLUXDB_ORIGIN_BUCKET_DAILY: mainnetOrigin1d
+      INFLUXDB_ORIGIN_BUCKET_CURRENT: mainnetOrigin60m
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pgpassword
+      POSTGRES_DB: postgres
+      POSTGRES_HOST: relay-meter-db:5434
+      MAX_ARCHIVE_AGE: 60
+      COLLECTION_INTERVAL_SECONDS: 10
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      relay-meter-db:
+        condition: service_healthy
+      pocket-http-db:
+        condition: service_healthy
+      portal-db:
+        condition: service_healthy
+
+  relay-meter-apiserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.production.apiserver
+    container_name: relay-meter-apiserver
+    restart: always
+    ports:
+      - 127.0.0.1:9898:9898
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pgpassword
+      POSTGRES_DB: postgres
+      POSTGRES_HOST: relay-meter-db:5434
+      BACKEND_API_URL: http://pocket-http-db:8090
+      BACKEND_API_TOKEN: test_api_key_6789
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      relay-meter-db:
+        condition: service_healthy
+      relay-meter-collector:
+        condition: service_started
+      pocket-http-db:
+        condition: service_healthy
+      portal-db:
+        condition: service_healthy
+
+  # Relay Meter Databases
+  influxdb:
+    image: influxdb:2.5.0
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    healthcheck:
+      test: "curl -f http://localhost:8086/ping"
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=influxuser
+      - DOCKER_INFLUXDB_INIT_PASSWORD=influxpassword
+      - DOCKER_INFLUXDB_INIT_ORG=myorg
+      - DOCKER_INFLUXDB_INIT_BUCKET=mainnetRelay
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=mytoken
+    depends_on:
+      pocket-http-db:
+        condition: service_healthy
+      portal-db:
+        condition: service_healthy
+
+  relay-meter-db:
+    image: postgres:13.7
+    container_name: relay-meter-db
+    restart: always
+    ports:
+      - "5434:5434"
+    command: -p 5434
+    environment:
+      POSTGRES_PASSWORD: pgpassword
+    volumes:
+      - ./tests/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: pg_isready -U postgres -p 5434
+      interval: 5s
+      retries: 5
+    depends_on:
+      pocket-http-db:
+        condition: service_healthy
+      portal-db:
+        condition: service_healthy
+
+  # Pocket HTTP DB Containers
+  pocket-http-db:
+    container_name: pocket-http-db
+    build: github.com/pokt-foundation/pocket-http-db.git#master
+    ports:
+      - 127.0.0.1:8090:8090
+    environment:
+      CONNECTION_STRING: postgres://postgres:pgpassword@portal-db:5432/postgres?sslmode=disable
+      API_KEYS: test_api_key_6789
+      PORT: 8090
+    depends_on:
+      portal-db:
+        condition: service_healthy
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8090 || exit 1
+      interval: 5s
+      retries: 3
+
+  portal-db:
+    image: postgres:14.3
+    container_name: portal-db
+    restart: always
+    expose:
+      - 5432
+    volumes:
+      - ./tests/init-portal-db.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      POSTGRES_PASSWORD: pgpassword
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 5s
+      retries: 5

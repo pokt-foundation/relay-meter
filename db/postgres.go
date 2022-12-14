@@ -11,7 +11,7 @@ import (
 
 	"database/sql"
 
-	"github.com/adshmh/meter/api"
+	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/utils-go/numbers"
 
 	// PQ import is required

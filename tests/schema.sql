@@ -13,6 +13,7 @@ CREATE TABLE relay_counts (
   count_failure INT,
   time TIMESTAMPTZ
 );
+
 CREATE TABLE todays_relay_counts (
   id INT GENERATED ALWAYS AS IDENTITY,
   time TIMESTAMPTZ,
@@ -22,6 +23,7 @@ CREATE TABLE todays_relay_counts (
   count_failure INT,
   count bigint
 );
+
 CREATE TABLE daily_app_sums (
   id INT GENERATED ALWAYS AS IDENTITY,
   application VARCHAR NOT NULL,
@@ -29,12 +31,14 @@ CREATE TABLE daily_app_sums (
   count_failure bigint NOT NULL,
   time TIMESTAMPTZ
 );
+
 CREATE TABLE todays_app_sums (
   id INT GENERATED ALWAYS AS IDENTITY,
   application VARCHAR NOT NULL,
-  count_success bigint NOT NULL
+  count_success bigint NOT NULL,
   count_failure bigint NOT NULL
 );
+
 CREATE TABLE todays_app_latencies (
   id INT GENERATED ALWAYS AS IDENTITY,
   application VARCHAR NOT NULL,

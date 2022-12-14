@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/adshmh/meter/db"
+	"github.com/pokt-foundation/relay-meter/db"
 	"github.com/pokt-foundation/utils-go/environment"
 )
 
