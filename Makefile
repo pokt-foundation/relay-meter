@@ -5,12 +5,18 @@ build:
 test_env_up:
 	docker-compose -f ./docker-compose.test.yml up -d --remove-orphans --build;
 	sleep 2;
+test_influx_env_up:
+	docker-compose -f ./docker-compose.influx.yml up -d --remove-orphans;
 test_env_down:
-	docker-compose -f ./docker-compose.test.yml down --remove-orphans
+	docker-compose -f ./docker-compose.test.yml down --remove-orphans;
+test_influx_env_down:
+	docker-compose -f ./docker-compose.influx.yml down --remove-orphans;
 run_integration_tests:
 	-go test ./... -run Integration -count=1;
 run_e2e_tests:
 	-go test ./... -run E2E -count=1 -tags=tests;
+run_influx_tests:
+	-go test ./... -run Test_RunSuite_InfluxIntegration -v -tags=tests -count=1
 run_all_tests:
 	-go test ./... -count=1;
 
