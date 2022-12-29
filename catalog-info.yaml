@@ -1,0 +1,44 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: relay-meter-service
+  annotations:
+    github.com/project-slug: pokt-foundation/relay-meter
+    github.com/team-slug: pokt-foundation/backend
+    backstage.io/techdocs-ref: dir:.
+  tags:
+  - go
+spec:
+  type: service
+  lifecycle: production
+  owner: backend
+  system: portal
+  providesApis:
+    - relay-meter-api
+  dependsOn:
+    - pocket-http-db
+    - portal-api-go
+    - influxdb
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: relay-meter-api
+  annotations:
+    github.com/project-slug: pokt-foundation/relay-meter
+    github.com/team-slug: pokt-foundation/backend
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - go
+  links:
+    - url: https://relay-meter.backend.pokt.network
+      title: RESTful API server URL
+      type: prod
+spec:
+  type: openapi
+  lifecycle: production
+  owner: backend
+  system: portal
+  definition:
+    # TODO: generate swagger.json OPENAPI doc
+    $text: ./docs/swagger.json

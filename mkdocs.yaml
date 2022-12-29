@@ -1,0 +1,8 @@
+site_name: "Relay Meter"
+site_description: "Documentation for the Relay Meter service"
+
+nav:
+  - Home: index.md
+
+plugins:
+  - techdocs-core
