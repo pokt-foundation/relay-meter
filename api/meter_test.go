@@ -11,7 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	logger "github.com/sirupsen/logrus"
 
-	"github.com/pokt-foundation/portal-api-go/repository"
+	"github.com/pokt-foundation/portal-db/types"
 	"github.com/pokt-foundation/utils-go/numbers"
 )
 
@@ -968,19 +968,19 @@ func TestLoadBalancerRelays(t *testing.T) {
 			fakeBackend := fakeBackend{
 				usage:       usageData,
 				todaysUsage: todaysUsage,
-				loadbalancers: map[string]*repository.LoadBalancer{
+				loadbalancers: map[string]*types.LoadBalancer{
 					"lb1": {
-						Applications: []*repository.Application{
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app1"}},
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app2"}},
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app3"}},
+						Applications: []*types.Application{
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app1"}},
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app2"}},
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app3"}},
 						},
 					},
 					"lb2": {
-						Applications: []*repository.Application{
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app4"}},
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app5"}},
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app6"}},
+						Applications: []*types.Application{
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app4"}},
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app5"}},
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app6"}},
 						},
 					},
 				},
@@ -1112,21 +1112,21 @@ func TestAllLoadBalancersRelays(t *testing.T) {
 			fakeBackend := fakeBackend{
 				usage:       usageData,
 				todaysUsage: todaysUsage,
-				loadbalancers: map[string]*repository.LoadBalancer{
+				loadbalancers: map[string]*types.LoadBalancer{
 					"lb1": {
 						ID: "lb1",
-						Applications: []*repository.Application{
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app1"}},
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app2"}},
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app3"}},
+						Applications: []*types.Application{
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app1"}},
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app2"}},
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app3"}},
 						},
 					},
 					"lb2": {
 						ID: "lb2",
-						Applications: []*repository.Application{
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app4"}},
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app5"}},
-							{GatewayAAT: repository.GatewayAAT{ApplicationPublicKey: "app6"}},
+						Applications: []*types.Application{
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app4"}},
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app5"}},
+							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app6"}},
 						},
 					},
 				},
@@ -1373,7 +1373,7 @@ type fakeBackend struct {
 	dailyMetricsFrom   time.Time
 	dailyMetricsTo     time.Time
 
-	loadbalancers map[string]*repository.LoadBalancer
+	loadbalancers map[string]*types.LoadBalancer
 }
 
 func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error) {
@@ -1401,12 +1401,12 @@ func (f *fakeBackend) UserApps(user string) ([]string, error) {
 	return f.userApps[user], nil
 }
 
-func (f *fakeBackend) LoadBalancer(endpoint string) (*repository.LoadBalancer, error) {
+func (f *fakeBackend) LoadBalancer(endpoint string) (*types.LoadBalancer, error) {
 	return f.loadbalancers[endpoint], f.err
 }
 
-func (f *fakeBackend) LoadBalancers() ([]*repository.LoadBalancer, error) {
-	var lbs []*repository.LoadBalancer
+func (f *fakeBackend) LoadBalancers() ([]*types.LoadBalancer, error) {
+	var lbs []*types.LoadBalancer
 
 	for _, lb := range f.loadbalancers {
 		lbs = append(lbs, lb)

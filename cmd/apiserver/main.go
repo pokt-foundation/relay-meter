@@ -11,13 +11,11 @@ import (
 
 	logger "github.com/sirupsen/logrus"
 
-	"github.com/pokt-foundation/portal-api-go/repository"
-	"github.com/pokt-foundation/utils-go/environment"
-
-	// TODO: replace with pokt-foundation/relay-meter
+	"github.com/pokt-foundation/portal-db/types"
 	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/relay-meter/cmd"
 	"github.com/pokt-foundation/relay-meter/db"
+	"github.com/pokt-foundation/utils-go/environment"
 )
 
 const (
@@ -87,7 +85,7 @@ func (b *backendProvider) UserApps(user string) ([]string, error) {
 		return nil, fmt.Errorf("Error from backend apiserver: %d, %s", resp.StatusCode, string(body))
 	}
 
-	var userApps []repository.Application
+	var userApps []types.Application
 	if err := json.Unmarshal(body, &userApps); err != nil {
 		return nil, err
 	}
@@ -101,7 +99,7 @@ func (b *backendProvider) UserApps(user string) ([]string, error) {
 	return applications, nil
 }
 
-func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalancer, error) {
+func (b *backendProvider) LoadBalancer(endpoint string) (*types.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.backendApiUrl, endpoint), nil)
@@ -123,14 +121,14 @@ func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalance
 		return nil, fmt.Errorf("Error from backend apiserver: %d, %s", resp.StatusCode, string(body))
 	}
 
-	var lb repository.LoadBalancer
+	var lb types.LoadBalancer
 	if err := json.Unmarshal(body, &lb); err != nil {
 		return nil, err
 	}
 	return &lb, nil
 }
 
-func (b *backendProvider) LoadBalancers() ([]*repository.LoadBalancer, error) {
+func (b *backendProvider) LoadBalancers() ([]*types.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer", b.backendApiUrl), nil)
@@ -152,7 +150,7 @@ func (b *backendProvider) LoadBalancers() ([]*repository.LoadBalancer, error) {
 		return nil, fmt.Errorf("Error from backend apiserver: %d, %s", resp.StatusCode, string(body))
 	}
 
-	var lbs []*repository.LoadBalancer
+	var lbs []*types.LoadBalancer
 	if err := json.Unmarshal(body, &lbs); err != nil {
 		return nil, err
 	}

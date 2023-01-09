@@ -4,13 +4,13 @@ go 1.18
 
 require (
 	github.com/gojektech/heimdall v5.0.2+incompatible
-	github.com/google/go-cmp v0.5.8
+	github.com/google/go-cmp v0.5.9
 	github.com/influxdata/influxdb-client-go/v2 v2.9.1
-	github.com/lib/pq v1.10.6
-	github.com/pokt-foundation/portal-api-go v0.3.1
+	github.com/lib/pq v1.10.7
+	github.com/pokt-foundation/portal-db v1.4.2
 	github.com/pokt-foundation/utils-go v0.2.9
 	github.com/sirupsen/logrus v1.9.0
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.1
 )
 
 require (

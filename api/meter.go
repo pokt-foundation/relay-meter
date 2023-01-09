@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pokt-foundation/portal-db/types"
 	logger "github.com/sirupsen/logrus"
-
-	"github.com/pokt-foundation/portal-api-go/repository"
 )
 
 const (
@@ -114,8 +113,8 @@ type Backend interface {
 	// Is expected to return the list of applicationIDs owned by the user
 	UserApps(user string) ([]string, error)
 	// LoadBalancer returns the full load balancer struct
-	LoadBalancer(endpoint string) (*repository.LoadBalancer, error)
-	LoadBalancers() ([]*repository.LoadBalancer, error)
+	LoadBalancer(endpoint string) (*types.LoadBalancer, error)
+	LoadBalancers() ([]*types.LoadBalancer, error)
 }
 
 func NewRelayMeter(backend Backend, logger *logger.Logger, options RelayMeterOptions) RelayMeter {
@@ -823,7 +822,7 @@ func maxArchiveAge(maxPastDays time.Duration) time.Duration {
 	return time.Duration(-1) * maxPastDays
 }
 
-func applicationPublicKey(app *repository.Application) string {
+func applicationPublicKey(app *types.Application) string {
 	if app == nil {
 		return ""
 	}
