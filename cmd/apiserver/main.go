@@ -45,6 +45,7 @@ type options struct {
 	todaysMetricsTTLSeconds int
 	maxPastDays             int
 	port                    int
+	apiKeys                 map[string]bool
 }
 
 func gatherOptions() options {
@@ -56,6 +57,7 @@ func gatherOptions() options {
 		todaysMetricsTTLSeconds: int(environment.GetInt64(ENV_TODAYS_METRICS_TTL_SECONDS, TODAYS_METRICS_TTL_DEFAULT_SECONDS)),
 		maxPastDays:             int(environment.GetInt64(ENV_MAX_ARCHIVE_AGE_DAYS, MAX_ARCHIVE_AGE_DEFAULT_DAYS)),
 		port:                    int(environment.GetInt64(ENV_SERVER_PORT, SERVER_PORT_DEFAULT)),
+		apiKeys:                 environment.MustGetStringMap("API_KEYS", ","),
 	}
 }
 
@@ -188,7 +190,7 @@ func main() {
 		backendApiToken: options.backendApiToken,
 	}
 	meter := api.NewRelayMeter(&backend, log, meterOptions)
-	http.HandleFunc("/", api.GetHttpServer(meter, log))
+	http.HandleFunc("/", api.GetHttpServer(meter, log, options.apiKeys))
 
 	log.Info("Starting the apiserver...")
 	http.ListenAndServe(fmt.Sprintf(":%d", options.port), nil)

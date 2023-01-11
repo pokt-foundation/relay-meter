@@ -192,7 +192,7 @@ func timePeriod(req *http.Request) (time.Time, time.Time, error) {
 // TODO: Return 304, i.e. Not Modified, if relevant
 // TODO: 'Accepts' Header in the request
 // serves: /relays/apps
-func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWriter, req *http.Request) {
+func GetHttpServer(meter RelayMeter, l *logger.Logger, apiKeys map[string]bool) func(w http.ResponseWriter, req *http.Request) {
 	match := func(r *regexp.Regexp, p string) string {
 		matches := r.FindStringSubmatch(p)
 		if len(matches) != 2 {
@@ -203,6 +203,17 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger) func(w http.ResponseWrite
 
 	return func(w http.ResponseWriter, req *http.Request) {
 		log := l.WithFields(logger.Fields{"Request": *req})
+
+		if !apiKeys[req.Header.Get("Authorization")] {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, err := w.Write([]byte("Unauthorized"))
+			if err != nil {
+				log.Error("Write in Unauthorized request failed")
+			}
+
+			return
+		}
+
 		if req.Method != http.MethodGet {
 			log.Warn("Incorrect request method, expected: " + http.MethodGet)
 			http.Error(w, fmt.Sprintf("Incorrect request method, expected: %s, got: %s", http.MethodPost, req.Method), http.StatusBadRequest)
