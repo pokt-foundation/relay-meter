@@ -79,7 +79,7 @@ func TestGetHttpServer(t *testing.T) {
 		},
 		{
 			name: "Failed auhtorization",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/endpoints?from=%s&to=%s",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/endpoints?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	logger "github.com/sirupsen/logrus"
@@ -19,16 +20,16 @@ const (
 
 var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
-	appsRelaysPath          = regexp.MustCompile(`^/v0/relays/apps/([[:alnum:]]+)$`)
-	allAppsRelaysPath       = regexp.MustCompile(`^/v0/relays/apps`)
-	usersRelaysPath         = regexp.MustCompile(`^/v0/relays/users/([[:alnum:]]+)$`)
-	lbRelaysPath            = regexp.MustCompile(`^/v0/relays/endpoints/([[:alnum:]]+)$`)
-	allLbsRelaysPath        = regexp.MustCompile(`^/v0/relays/endpoints`)
-	totalRelaysPath         = regexp.MustCompile(`^/v0/relays`)
-	originUsagePath         = regexp.MustCompile(`^/v0/relays/origin-classification`)
-	specificOriginUsagePath = regexp.MustCompile(`^/v0/relays/origin-classification/([[:alnum:]].*)`)
-	appsLatencyPath         = regexp.MustCompile(`^/v0/latency/apps/([[:alnum:]]+)$`)
-	allAppsLatencyPath      = regexp.MustCompile(`^/v0/latency/apps`)
+	appsRelaysPath          = regexp.MustCompile(`^/v[0-1]/relays/apps/([[:alnum:]]+)$`)
+	allAppsRelaysPath       = regexp.MustCompile(`^/v[0-1]/relays/apps`)
+	usersRelaysPath         = regexp.MustCompile(`^/v[0-1]/relays/users/([[:alnum:]]+)$`)
+	lbRelaysPath            = regexp.MustCompile(`^/v[0-1]/relays/endpoints/([[:alnum:]]+)$`)
+	allLbsRelaysPath        = regexp.MustCompile(`^/v[0-1]/relays/endpoints`)
+	totalRelaysPath         = regexp.MustCompile(`^/v[0-1]/relays`)
+	originUsagePath         = regexp.MustCompile(`^/v[0-1]/relays/origin-classification`)
+	specificOriginUsagePath = regexp.MustCompile(`^/v[0-1]/relays/origin-classification/([[:alnum:]].*)`)
+	appsLatencyPath         = regexp.MustCompile(`^/v[0-1]/latency/apps/([[:alnum:]]+)$`)
+	allAppsLatencyPath      = regexp.MustCompile(`^/v[0-1]/latency/apps`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -204,14 +205,16 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger, apiKeys map[string]bool) 
 	return func(w http.ResponseWriter, req *http.Request) {
 		log := l.WithFields(logger.Fields{"Request": *req})
 
-		if !apiKeys[req.Header.Get("Authorization")] {
-			w.WriteHeader(http.StatusUnauthorized)
-			_, err := w.Write([]byte("Unauthorized"))
-			if err != nil {
-				log.Error("Write in Unauthorized request failed")
-			}
+		if strings.HasPrefix(req.URL.Path, "/v1") {
+			if !apiKeys[req.Header.Get("Authorization")] {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, err := w.Write([]byte("Unauthorized"))
+				if err != nil {
+					log.Error("Write in Unauthorized request failed")
+				}
 
-			return
+				return
+			}
 		}
 
 		if req.Method != http.MethodGet {
