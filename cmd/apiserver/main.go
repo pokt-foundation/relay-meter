@@ -57,7 +57,7 @@ func gatherOptions() options {
 		todaysMetricsTTLSeconds: int(environment.GetInt64(ENV_TODAYS_METRICS_TTL_SECONDS, TODAYS_METRICS_TTL_DEFAULT_SECONDS)),
 		maxPastDays:             int(environment.GetInt64(ENV_MAX_ARCHIVE_AGE_DAYS, MAX_ARCHIVE_AGE_DEFAULT_DAYS)),
 		port:                    int(environment.GetInt64(ENV_SERVER_PORT, SERVER_PORT_DEFAULT)),
-		apiKeys:                 environment.MustGetStringMap("API_KEYS", ","),
+		apiKeys:                 environment.MustGetStringMap("API_KEYS", ";"),
 	}
 }
 
