@@ -22,6 +22,7 @@ func TestGetHttpServer(t *testing.T) {
 		url                string
 		expected           string
 		expectedStatusCode int
+		failAuth           bool
 	}{
 		{
 			name: "App relays path is handled correctly",
@@ -76,13 +77,25 @@ func TestGetHttpServer(t *testing.T) {
 			),
 			expectedStatusCode: http.StatusOK,
 		},
+		{
+			name: "Failed auhtorization",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/endpoints?from=%s&to=%s",
+				url.QueryEscape(now.Format(time.RFC3339)),
+				url.QueryEscape(now.Format(time.RFC3339)),
+			),
+			failAuth:           true,
+			expectedStatusCode: http.StatusUnauthorized,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			httpServer := GetHttpServer(&fakeRelayMeter{}, logger.New())
+			httpServer := GetHttpServer(&fakeRelayMeter{}, logger.New(), map[string]bool{"dummy": true})
 
 			req := httptest.NewRequest("GET", tc.url, nil)
+			if !tc.failAuth {
+				req.Header.Add("Authorization", "dummy")
+			}
 			w := httptest.NewRecorder()
 
 			httpServer(w, req)
@@ -93,10 +106,12 @@ func TestGetHttpServer(t *testing.T) {
 				t.Errorf("Expected status code: %d, got: %d", tc.expectedStatusCode, resp.StatusCode)
 			}
 
-			body, _ := io.ReadAll(resp.Body)
-			var r AppRelaysResponse
-			if err := json.Unmarshal(body, &r); err != nil {
-				t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
+			if !tc.failAuth {
+				body, _ := io.ReadAll(resp.Body)
+				var r AppRelaysResponse
+				if err := json.Unmarshal(body, &r); err != nil {
+					t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
+				}
 			}
 		})
 	}
