@@ -205,16 +205,14 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger, apiKeys map[string]bool) 
 	return func(w http.ResponseWriter, req *http.Request) {
 		log := l.WithFields(logger.Fields{"Request": *req})
 
-		if strings.HasPrefix(req.URL.Path, "/v1") {
-			if !apiKeys[req.Header.Get("Authorization")] {
-				w.WriteHeader(http.StatusUnauthorized)
-				_, err := w.Write([]byte("Unauthorized"))
-				if err != nil {
-					log.Error("Write in Unauthorized request failed")
-				}
-
-				return
+		if strings.HasPrefix(req.URL.Path, "/v1") && !apiKeys[req.Header.Get("Authorization")] {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, err := w.Write([]byte("Unauthorized"))
+			if err != nil {
+				log.Error("Write in Unauthorized request failed")
 			}
+
+			return
 		}
 
 		if req.Method != http.MethodGet {
