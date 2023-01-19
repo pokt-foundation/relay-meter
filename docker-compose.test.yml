@@ -111,7 +111,7 @@ services:
     ports:
       - 127.0.0.1:8090:8090
     environment:
-      CONNECTION_STRING: postgres://postgres:pgpassword@portal-db:5432/postgres?sslmode=disable
+      CONNECTION_STRING: postgres://postgres:pgpassword@portal-db:5432/postgres?sslmode=disable # pragma: allowlist secret
       API_KEYS: test_api_key_6789
       PORT: 8090
     depends_on:
