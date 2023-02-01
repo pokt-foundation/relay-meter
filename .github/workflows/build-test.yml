@@ -49,14 +49,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Build
-        run: make
-
       - name: Run Unit tests
-        run: make test_unit
+        run: go test ./...  -short
 
       - name: Build the Docker test stack
-        run: make test_env_up
+        run: |
+          docker-compose -f ./docker-compose.test.yml up -d --build;
+          sleep 15;
 
       - name: Run E2E test
-        run: make run_e2e_tests
+        run: go test ./... -run E2E -count=1
