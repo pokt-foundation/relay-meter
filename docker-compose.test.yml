@@ -1,23 +1,6 @@
 version: "3.5"
 
 services:
-  # Pocket HTTP DB Containers
-  pocket-http-db:
-    container_name: pocket-http-db
-    build: github.com/pokt-foundation/pocket-http-db.git#master
-    ports:
-      - 127.0.0.1:8090:8090
-    environment:
-      CONNECTION_STRING: postgres://postgres:pgpassword@portal-db:5432/postgres?sslmode=disable # pragma: allowlist secret
-      API_KEYS: test_api_key_6789
-      PORT: 8090
-    depends_on:
-      portal-db:
-        condition: service_healthy
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8090 || exit 1
-      interval: 5s
-      retries: 3
 
   # Relay Meter Containers
   relay-meter-collector:
@@ -57,8 +40,9 @@ services:
     container_name: relay-meter-apiserver
     restart: always
     ports:
-      - 127.0.0.1:9899:9899
+      - 127.0.0.1:9898:9898
     environment:
+      API_KEYS: test_api_key_1234
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pgpassword
       POSTGRES_DB: postgres
@@ -111,7 +95,7 @@ services:
     environment:
       POSTGRES_PASSWORD: pgpassword
     volumes:
-      - ./tests/schema.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./schema.test.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: pg_isready -U postgres -p 5434
       interval: 5s
@@ -121,6 +105,24 @@ services:
         condition: service_healthy
       portal-db:
         condition: service_healthy
+
+  # Pocket HTTP DB Containers
+  pocket-http-db:
+    container_name: pocket-http-db
+    build: github.com/pokt-foundation/pocket-http-db.git#master
+    ports:
+      - 127.0.0.1:8090:8090
+    environment:
+      CONNECTION_STRING: postgres://postgres:pgpassword@portal-db:5432/postgres?sslmode=disable # pragma: allowlist secret
+      API_KEYS: test_api_key_6789
+      PORT: 8090
+    depends_on:
+      portal-db:
+        condition: service_healthy
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8090 || exit 1
+      interval: 5s
+      retries: 3
 
   portal-db:
     image: pocketfoundation/test-portal-postgres:latest

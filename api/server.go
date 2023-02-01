@@ -20,15 +20,15 @@ const (
 
 var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
-	appsRelaysPath          = regexp.MustCompile(`^/v[0-1]/relays/apps/([[:alnum:]]+)$`)
+	appsRelaysPath          = regexp.MustCompile(`^/v[0-1]/relays/apps/([[:alnum:]_]+)$`)
 	allAppsRelaysPath       = regexp.MustCompile(`^/v[0-1]/relays/apps`)
-	usersRelaysPath         = regexp.MustCompile(`^/v[0-1]/relays/users/([[:alnum:]]+)$`)
-	lbRelaysPath            = regexp.MustCompile(`^/v[0-1]/relays/endpoints/([[:alnum:]]+)$`)
+	usersRelaysPath         = regexp.MustCompile(`^/v[0-1]/relays/users/([[:alnum:]_]+)$`)
+	lbRelaysPath            = regexp.MustCompile(`^/v[0-1]/relays/endpoints/([[:alnum:]_]+)$`)
 	allLbsRelaysPath        = regexp.MustCompile(`^/v[0-1]/relays/endpoints`)
 	totalRelaysPath         = regexp.MustCompile(`^/v[0-1]/relays`)
 	originUsagePath         = regexp.MustCompile(`^/v[0-1]/relays/origin-classification`)
-	specificOriginUsagePath = regexp.MustCompile(`^/v[0-1]/relays/origin-classification/([[:alnum:]].*)`)
-	appsLatencyPath         = regexp.MustCompile(`^/v[0-1]/latency/apps/([[:alnum:]]+)$`)
+	specificOriginUsagePath = regexp.MustCompile(`^/v[0-1]/relays/origin-classification/([[:alnum:]_].*)`)
+	appsLatencyPath         = regexp.MustCompile(`^/v[0-1]/latency/apps/([[:alnum:]_]+)$`)
 	allAppsLatencyPath      = regexp.MustCompile(`^/v[0-1]/latency/apps`)
 )
 
@@ -101,6 +101,7 @@ func handleOriginClassification(meter RelayMeter, l *logger.Logger, w http.Respo
 }
 
 func handleAppLatency(meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
+	fmt.Println("FIRING APP LATENCY")
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.AppLatency(app)
 	}
