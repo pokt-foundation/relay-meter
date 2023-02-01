@@ -21,60 +21,61 @@ import (
 )
 
 const (
-	// PHD API
-	ENV_BACKEND_API_URL            = "BACKEND_API_URL"
-	ENV_BACKEND_API_TOKEN          = "BACKEND_API_TOKEN"
-	ENV_LOAD_INTERVAL_SECONDS      = "LOAD_INTERVAL_SECONDS"
-	ENV_DAILY_METRICS_TTL_SECONDS  = "DAILY_METRICS_TTL_SECONDS"
-	ENV_TODAYS_METRICS_TTL_SECONDS = "TODAYS_METRICS_TTL_SECONDS"
-	ENV_MAX_ARCHIVE_AGE_DAYS       = "MAX_ARCHIVE_AGE"
-	ENV_SERVER_PORT                = "API_SERVER_PORT"
+	relayMeterAPIKeys       = "API_KEYS"
+	phdBaseURL              = "BACKEND_API_URL"
+	phdAPIKey               = "BACKEND_API_TOKEN"
+	loadIntervalSeconds     = "LOAD_INTERVAL_SECONDS"
+	failtMetricsTTLSeconds  = "DAILY_METRICS_TTL_SECONDS"
+	todaysMetricsTTLSeconds = "TODAYS_METRICS_TTL_SECONDS"
+	maxArchiveAgeDays       = "MAX_ARCHIVE_AGE"
+	serverPort              = "API_SERVER_PORT"
 
-	LOAD_INTERVAL_DEFAULT_SECONDS      = 30
-	DAILY_METRICS_TTL_DEFAULT_SECONDS  = 120
-	TODAYS_METRICS_TTL_DEFAULT_SECONDS = 60
-	MAX_ARCHIVE_AGE_DEFAULT_DAYS       = 30
-	SERVER_PORT_DEFAULT                = 9898
+	defaultLoadIntervalSeconds      = 30
+	defaultDailyMetricsTTLSeconds   = 120
+	defaultsTodaysMetricsTTLSeconds = 60
+	defaultMaxArchiveAgeDays        = 30
+	defaultServerPort               = 9898
 )
 
 type options struct {
-	backendApiUrl           string
-	backendApiToken         string
+	phdBaseURL              string
+	phdAPIKey               string
 	loadInterval            int
 	dailyMetricsTTLSeconds  int
 	todaysMetricsTTLSeconds int
 	maxPastDays             int
 	port                    int
-	apiKeys                 map[string]bool
+	relayMeterAPIKeys       map[string]bool
 }
 
 func gatherOptions() options {
 	return options{
-		backendApiUrl:           environment.MustGetString(ENV_BACKEND_API_URL),
-		backendApiToken:         environment.MustGetString(ENV_BACKEND_API_TOKEN),
-		loadInterval:            int(environment.GetInt64(ENV_LOAD_INTERVAL_SECONDS, LOAD_INTERVAL_DEFAULT_SECONDS)),
-		dailyMetricsTTLSeconds:  int(environment.GetInt64(ENV_DAILY_METRICS_TTL_SECONDS, DAILY_METRICS_TTL_DEFAULT_SECONDS)),
-		todaysMetricsTTLSeconds: int(environment.GetInt64(ENV_TODAYS_METRICS_TTL_SECONDS, TODAYS_METRICS_TTL_DEFAULT_SECONDS)),
-		maxPastDays:             int(environment.GetInt64(ENV_MAX_ARCHIVE_AGE_DAYS, MAX_ARCHIVE_AGE_DEFAULT_DAYS)),
-		port:                    int(environment.GetInt64(ENV_SERVER_PORT, SERVER_PORT_DEFAULT)),
-		apiKeys:                 environment.MustGetStringMap("API_KEYS", ";"),
+		relayMeterAPIKeys: environment.MustGetStringMap(relayMeterAPIKeys, ";"),
+		phdBaseURL:        environment.MustGetString(phdBaseURL),
+		phdAPIKey:         environment.MustGetString(phdAPIKey),
+
+		loadInterval:            int(environment.GetInt64(loadIntervalSeconds, defaultLoadIntervalSeconds)),
+		dailyMetricsTTLSeconds:  int(environment.GetInt64(failtMetricsTTLSeconds, defaultDailyMetricsTTLSeconds)),
+		todaysMetricsTTLSeconds: int(environment.GetInt64(todaysMetricsTTLSeconds, defaultsTodaysMetricsTTLSeconds)),
+		maxPastDays:             int(environment.GetInt64(maxArchiveAgeDays, defaultMaxArchiveAgeDays)),
+		port:                    int(environment.GetInt64(serverPort, defaultServerPort)),
 	}
 }
 
 type backendProvider struct {
 	db.PostgresClient
-	backendApiUrl   string
-	backendApiToken string
+	phdBaseURL string
+	phdAPIKey  string
 }
 
 func (b *backendProvider) UserApps(user string) ([]string, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/user/%s/application", b.backendApiUrl, user), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/user/%s/application", b.phdBaseURL, user), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Authorization", b.backendApiToken)
+	req.Header.Add("Authorization", b.phdAPIKey)
 
 	client := http.Client{}
 	resp, err := client.Do(req)
@@ -106,11 +107,11 @@ func (b *backendProvider) UserApps(user string) ([]string, error) {
 func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.backendApiUrl, endpoint), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer/%s", b.phdBaseURL, endpoint), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Authorization", b.backendApiToken)
+	req.Header.Add("Authorization", b.phdAPIKey)
 
 	client := http.Client{}
 	resp, err := client.Do(req)
@@ -135,11 +136,11 @@ func (b *backendProvider) LoadBalancer(endpoint string) (*repository.LoadBalance
 func (b *backendProvider) LoadBalancers() ([]*repository.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer", b.backendApiUrl), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer", b.phdBaseURL), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Authorization", b.backendApiToken)
+	req.Header.Add("Authorization", b.phdAPIKey)
 
 	client := http.Client{}
 	resp, err := client.Do(req)
@@ -185,12 +186,12 @@ func main() {
 	log.WithFields(logger.Fields{"postgresOptions": postgresOptions, "meterOptions": meterOptions}).Info("Gathered options.")
 
 	backend := backendProvider{
-		PostgresClient:  pgClient,
-		backendApiUrl:   options.backendApiUrl,
-		backendApiToken: options.backendApiToken,
+		PostgresClient: pgClient,
+		phdBaseURL:     options.phdBaseURL,
+		phdAPIKey:      options.phdAPIKey,
 	}
 	meter := api.NewRelayMeter(&backend, log, meterOptions)
-	http.HandleFunc("/", api.GetHttpServer(meter, log, options.apiKeys))
+	http.HandleFunc("/", api.GetHttpServer(meter, log, options.relayMeterAPIKeys))
 
 	log.Info("Starting the apiserver...")
 	http.ListenAndServe(fmt.Sprintf(":%d", options.port), nil)

@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	collectingIntervalSeconds = "COLLECTION_INTERVAL_SECONDS"
+	collectionIntervalSeconds = "COLLECTION_INTERVAL_SECONDS"
 	reportIntervalSeconds     = "REPORT_INTERVAL_SECONDS"
 	maxArchiveAgeDays         = "MAX_ARCHIVE_AGE"
 
-	defaultCollectIntervalSeconds = 300
-	defaultReportIntervalSeconds  = 30
-	defaultMaxArchiveAgeDays      = 30
+	defaultCollectionIntervalSeconds = 300
+	defaultReportIntervalSeconds     = 30
+	defaultMaxArchiveAgeDays         = 30
 )
 
 type options struct {
@@ -32,7 +32,7 @@ type options struct {
 
 func gatherOptions() options {
 	return options{
-		collectionInterval: int(environment.GetInt64(collectingIntervalSeconds, defaultCollectIntervalSeconds)),
+		collectionInterval: int(environment.GetInt64(collectionIntervalSeconds, defaultCollectionIntervalSeconds)),
 		reportingInterval:  int(environment.GetInt64(reportIntervalSeconds, defaultReportIntervalSeconds)),
 		maxArchiveAge:      time.Duration(environment.GetInt64(maxArchiveAgeDays, defaultMaxArchiveAgeDays)) * 24 * time.Hour,
 	}
