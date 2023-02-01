@@ -15,7 +15,7 @@ import (
 
 	"github.com/gojektech/heimdall/httpclient"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	"github.com/pokt-foundation/portal-api-go/repository"
+	"github.com/pokt-foundation/portal-db/types"
 	"github.com/pokt-foundation/relay-meter/db"
 	stringUtils "github.com/pokt-foundation/utils-go/strings"
 	timeUtils "github.com/pokt-foundation/utils-go/time"
@@ -260,11 +260,11 @@ func (ts *RelayMeterTestSuite) populateInfluxRelays() error {
 
 // Initializes Pocket HTTP DB with required apps and LBs (will not recreate if they already exist)
 func (ts *RelayMeterTestSuite) populatePocketHTTPDB() error {
-	existingApps, err := get[[]repository.Application](ts.options.phdBaseURL, "application", "", "", ts.options.phdAPIKey, ts.httpClient)
+	existingApps, err := get[[]types.Application](ts.options.phdBaseURL, "application", "", "", ts.options.phdAPIKey, ts.httpClient)
 	if err != nil {
 		return err
 	}
-	existingLBs, err := get[[]repository.LoadBalancer](ts.options.phdBaseURL, "load_balancer", "", "", ts.options.phdAPIKey, ts.httpClient)
+	existingLBs, err := get[[]types.LoadBalancer](ts.options.phdBaseURL, "load_balancer", "", "", ts.options.phdAPIKey, ts.httpClient)
 	if err != nil {
 		return err
 	}
@@ -282,7 +282,7 @@ func (ts *RelayMeterTestSuite) populatePocketHTTPDB() error {
 		var createdAppID string
 		if !stringUtils.ExactContains(existingAppNames, fmt.Sprintf("test-application-%d", i+1)) {
 			appInput := fmt.Sprintf(applicationJSON, i+1, ts.options.testUserID, application.ApplicationPublicKey)
-			createdApplication, err := post[repository.Application](ts.options.phdBaseURL, "application", ts.options.phdAPIKey, []byte(appInput), ts.httpClient)
+			createdApplication, err := post[types.Application](ts.options.phdBaseURL, "application", ts.options.phdAPIKey, []byte(appInput), ts.httpClient)
 			if err != nil {
 				return err
 			}
@@ -292,7 +292,7 @@ func (ts *RelayMeterTestSuite) populatePocketHTTPDB() error {
 		/* Create Load Balancer -> POST /load_balancer */
 		if !stringUtils.ExactContains(existingLBNames, fmt.Sprintf("test-load-balancer-%d", i+1)) {
 			loadBalancerInput := fmt.Sprintf(loadBalancerJSON, i+1, ts.options.testUserID, createdAppID)
-			_, err = post[repository.LoadBalancer](ts.options.phdBaseURL, "load_balancer", ts.options.phdAPIKey, []byte(loadBalancerInput), ts.httpClient)
+			_, err = post[types.LoadBalancer](ts.options.phdBaseURL, "load_balancer", ts.options.phdAPIKey, []byte(loadBalancerInput), ts.httpClient)
 			if err != nil {
 				return err
 			}
