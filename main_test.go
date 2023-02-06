@@ -319,29 +319,16 @@ func (ts *RelayMeterTestSuite) Test_AllAppLatenciesEndpoint() {
 
 func (ts *RelayMeterTestSuite) Test_AppLatenciesEndpoint() {
 	tests := []struct {
-		name                  string
-		date                  time.Time
-		appPubKey             string
-		expectedHourlyLatency map[string]float64
-		err                   error
+		name      string
+		date      time.Time
+		appPubKey string
+		err       error
 	}{
 		{
 			name:      "Test return value of /latency/apps/{APP_PUB_KEY} endpoint",
 			date:      ts.startOfDay,
 			appPubKey: ts.TestRelays[0].ApplicationPublicKey,
-			expectedHourlyLatency: map[string]float64{
-				ts.TestRelays[0].ApplicationPublicKey: 0.16475,
-				ts.TestRelays[1].ApplicationPublicKey: 0.20045,
-				ts.TestRelays[2].ApplicationPublicKey: 0.08137,
-				ts.TestRelays[3].ApplicationPublicKey: 0.15785,
-				ts.TestRelays[4].ApplicationPublicKey: 0.05467,
-				ts.TestRelays[5].ApplicationPublicKey: 0.1093,
-				ts.TestRelays[6].ApplicationPublicKey: 0.2205,
-				ts.TestRelays[7].ApplicationPublicKey: 0.0932,
-				ts.TestRelays[8].ApplicationPublicKey: 0.1162,
-				ts.TestRelays[9].ApplicationPublicKey: 0.0814,
-			},
-			err: nil,
+			err:       nil,
 		},
 	}
 
@@ -400,7 +387,7 @@ type (
 
 // SetupSuite runs before each test suite run - takes just over 1 minute to complete
 func (ts *RelayMeterTestSuite) SetupSuite() {
-	<-time.After(15 * time.Second) // Wait for Docker env to finish setting up
+	<-time.After(20 * time.Second) // Wait for Docker env to finish setting up
 
 	ts.configureTimePeriod() // Configure time period for test
 
