@@ -466,6 +466,8 @@ func (ts *RelayMeterTestSuite) resetInfluxBuckets() error {
 		if err != nil {
 			return err
 		}
+
+		<-time.After(5 * time.Second)
 	}
 
 	return nil
@@ -702,7 +704,10 @@ const (
 	|> filter(fn: (r) => (r["_measurement"] == "origin"))
 	|> filter(fn: (r) => (r["_field"] == "origin"))
 	|> window(every: 1ms)
-	|> reduce(fn: (r, accumulator) => ({count: accumulator.count + 1, origin: r._value}), identity: {origin: "", count: 1})
+	|> reduce(
+        fn: (r, accumulator) => ({count: accumulator.count + 1, origin: r._value}),
+        identity: {origin: "", count: 1},
+    )
 	|> to(
 		bucket: "%s",
 		org: "myorg",

@@ -40,7 +40,7 @@ services:
     container_name: relay-meter-apiserver
     restart: always
     ports:
-      - 127.0.0.1:9898:9898
+      - "9898:9898"
     environment:
       API_KEYS: test_api_key_1234
       POSTGRES_USER: postgres
@@ -111,7 +111,7 @@ services:
     container_name: pocket-http-db
     build: github.com/pokt-foundation/pocket-http-db.git#master
     ports:
-      - 127.0.0.1:8090:8090
+      - "8090:8090"
     environment:
       CONNECTION_STRING: postgres://postgres:pgpassword@portal-db:5432/postgres?sslmode=disable # pragma: allowlist secret
       API_KEYS: test_api_key_6789
