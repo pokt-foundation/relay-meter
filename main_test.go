@@ -509,7 +509,7 @@ func (ts *RelayMeterTestSuite) runInfluxTasks() error {
 		if err != nil {
 			return err
 		}
-		<-time.After(15 * time.Second) // Wait for task to complete
+		<-time.After(20 * time.Second) // Wait for task to complete
 	}
 
 	return nil
