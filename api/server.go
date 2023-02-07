@@ -101,7 +101,6 @@ func handleOriginClassification(meter RelayMeter, l *logger.Logger, w http.Respo
 }
 
 func handleAppLatency(meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
-	fmt.Println("FIRING APP LATENCY")
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.AppLatency(app)
 	}
