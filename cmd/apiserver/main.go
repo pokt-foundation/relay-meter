@@ -136,7 +136,6 @@ func (b *backendProvider) LoadBalancer(endpoint string) (*types.LoadBalancer, er
 func (b *backendProvider) LoadBalancers() ([]*types.LoadBalancer, error) {
 	// TODO: make the timeout configurable
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
-	fmt.Println("HERE", fmt.Sprintf("%s/load_balancer", b.phdBaseURL))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/load_balancer", b.phdBaseURL), nil)
 	if err != nil {
 		return nil, err
