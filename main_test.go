@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -169,6 +170,17 @@ func (ts *RelayMeterTestSuite) Test_UserRelaysEndpoint() {
 	}
 }
 
+func PrettyString(label string, thing interface{}) {
+	jsonThing, _ := json.Marshal(thing)
+	str := string(jsonThing)
+
+	var prettyJSON bytes.Buffer
+	_ = json.Indent(&prettyJSON, []byte(str), "", "    ")
+	output := prettyJSON.String()
+
+	fmt.Println(label, output)
+}
+
 func (ts *RelayMeterTestSuite) Test_AllLoadBalancerRelaysEndpoint() {
 	tests := []struct {
 		name string
@@ -185,6 +197,7 @@ func (ts *RelayMeterTestSuite) Test_AllLoadBalancerRelaysEndpoint() {
 	for _, test := range tests {
 		allEndpointsRelays, err := get[[]api.LoadBalancerRelaysResponse](ts.options.relayMeterBaseURL, "v1/relays/endpoints", "", ts.dateParams, testAPIKey, ts.httpClient)
 		ts.Equal(test.err, err)
+		PrettyString("ENDPOINT RELAYS HERE", allEndpointsRelays)
 		for _, endpointRelays := range allEndpointsRelays {
 			if endpointRelays.Applications != nil {
 				ts.NotEmpty(endpointRelays.Endpoint)
@@ -470,6 +483,8 @@ func (ts *RelayMeterTestSuite) resetInfluxBuckets() error {
 		<-time.After(5 * time.Second)
 	}
 
+	<-time.After(5 * time.Second) // Wait for bucket creation to complete
+
 	return nil
 }
 
@@ -509,6 +524,7 @@ func (ts *RelayMeterTestSuite) runInfluxTasks() error {
 		if err != nil {
 			return err
 		}
+
 		<-time.After(20 * time.Second) // Wait for task to complete
 	}
 
