@@ -416,12 +416,14 @@ func (ts *RelayMeterTestSuite) SetupSuite() {
 
 	err = ts.resetInfluxBuckets() // Ensure Influx buckets are empty at start of test
 	ts.NoError(err)
+	<-time.After(5 * time.Second) // Wait for bucket creation to complete
 
 	err = ts.populateInfluxRelays() // Populate Influx DB with 100,000 relays
 	ts.NoError(err)
-	err = ts.runInfluxTasks() // Manually run the Influx tasks (takes ~30 seconds)
-	ts.NoError(err)
+	<-time.After(10 * time.Second) // Wait for relay population to complete
 
+	err = ts.runInfluxTasks() // Manually run the Influx tasks (takes ~40 seconds)
+	ts.NoError(err)
 	<-time.After(30 * time.Second) // Wait 30 seconds for collector to run and write to Postgres
 }
 
