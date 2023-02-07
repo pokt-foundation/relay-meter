@@ -390,7 +390,7 @@ type (
 
 // SetupSuite runs before each test suite run - takes just over 1 minute to complete
 func (ts *RelayMeterTestSuite) SetupSuite() {
-	<-time.After(20 * time.Second) // Wait for Docker env to finish setting up
+	// <-time.After(20 * time.Second) // Wait for Docker env to finish setting up
 
 	ts.configureTimePeriod() // Configure time period for test
 
@@ -410,7 +410,7 @@ func (ts *RelayMeterTestSuite) SetupSuite() {
 
 	err = ts.populateInfluxRelays() // Populate Influx DB with 100,000 relays
 	ts.NoError(err)
-	<-time.After(10 * time.Second) // Wait for relay population to complete
+	<-time.After(5 * time.Second) // Wait for relay population to complete
 
 	err = ts.runInfluxTasks() // Manually run the Influx tasks (takes ~40 seconds)
 	ts.NoError(err)
@@ -512,12 +512,19 @@ func (ts *RelayMeterTestSuite) runInfluxTasks() error {
 			return err
 		}
 
+		taskOffset := "10s"
+		task.Offset = &taskOffset
+		task, err = tasksAPI.UpdateTask(ctx, task)
+		if err != nil {
+			return err
+		}
+
 		_, err = tasksAPI.RunManually(ctx, task)
 		if err != nil {
 			return err
 		}
 
-		<-time.After(20 * time.Second) // Wait for task to complete
+		<-time.After(10 * time.Second) // Wait for task to complete
 	}
 
 	return nil
