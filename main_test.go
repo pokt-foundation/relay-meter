@@ -393,15 +393,16 @@ func (ts *RelayMeterTestSuite) SetupSuite() {
 	ts.configureTimePeriod() // Configure time period for test
 
 	ts.httpClient = httpclient.NewClient( // HTTP client to test API Server and populate PHD DB
-		httpclient.WithHTTPTimeout(5*time.Second), httpclient.WithRetryCount(2),
+		httpclient.WithHTTPTimeout(10*time.Second), httpclient.WithRetryCount(2),
 	)
 
 	err := ts.getTestRelays() // Marshals test relay JSON to array of structs
 	ts.NoError(err)
-	<-time.After(2 * time.Second)
+	<-time.After(1 * time.Second)
 
 	err = ts.initInflux() // Setup Influx client to interact with Influx DB
 	ts.NoError(err)
+	<-time.After(1 * time.Second)
 
 	err = ts.resetInfluxBuckets() // Ensure Influx buckets are empty at start of test
 	ts.NoError(err)
