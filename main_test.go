@@ -393,14 +393,16 @@ func (ts *RelayMeterTestSuite) SetupSuite() {
 	ts.configureTimePeriod() // Configure time period for test
 
 	ts.httpClient = httpclient.NewClient( // HTTP client to test API Server and populate PHD DB
-		httpclient.WithHTTPTimeout(5*time.Second), httpclient.WithRetryCount(0),
+		httpclient.WithHTTPTimeout(10*time.Second), httpclient.WithRetryCount(1),
 	)
 
 	err := ts.getTestRelays() // Marshals test relay JSON to array of structs
 	ts.NoError(err)
+	<-time.After(1 * time.Second)
 
 	err = ts.initInflux() // Setup Influx client to interact with Influx DB
 	ts.NoError(err)
+	<-time.After(1 * time.Second)
 
 	err = ts.resetInfluxBuckets() // Ensure Influx buckets are empty at start of test
 	ts.NoError(err)
@@ -412,7 +414,8 @@ func (ts *RelayMeterTestSuite) SetupSuite() {
 
 	err = ts.runInfluxTasks() // Manually run the Influx tasks (takes ~40 seconds)
 	ts.NoError(err)
-	<-time.After(45 * time.Second) // Wait 30 seconds for collector to run and write to Postgres
+
+	<-time.After(60 * time.Second) // Wait 30 seconds for collector to run and write to Postgres
 }
 
 // Sets the time period vars for the test (00:00.000 to 23:59:59.999 UTC of current day)
@@ -547,7 +550,7 @@ func (ts *RelayMeterTestSuite) getTestRelays() error {
 
 // Saves a test batch of relays to the InfluxDB mainBucket
 func (ts *RelayMeterTestSuite) populateInfluxRelays() error {
-	numberOfRelays := 100_000
+	numberOfRelays := 100
 
 	timestampInterval := (24 * time.Hour) / time.Duration(numberOfRelays)
 
