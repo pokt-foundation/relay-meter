@@ -12,7 +12,7 @@ run_integration_tests:
 run_e2e_tests:
 	-go test ./... -run E2E -count=1 -tags=tests;
 run_functional_tests:
-	-go test ./... -run Functional -count=1 -tags=tests;
+	go test ./... -run Functional -count=1 -tags=tests;
 run_all_tests:
 	-go test ./... -count=1;
 
