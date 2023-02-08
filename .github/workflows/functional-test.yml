@@ -1,4 +1,4 @@
-name: Build & Test
+name: Functional Tests
 
 on:
   push:
@@ -32,5 +32,5 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Run Unit tests
+      - name: Run Functional tests
         run: make run_functional_tests

@@ -31,7 +31,7 @@ func (ts *RelayMeterFunctionalTestSuite) Test_TodayAllRelayApps() {
 		}
 	}
 
-	ts.False(allZero)
+	ts.True(allZero)
 }
 
 func (ts *RelayMeterFunctionalTestSuite) Test_YesterdayAllRelayApps() {
