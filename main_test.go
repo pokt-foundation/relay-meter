@@ -415,7 +415,7 @@ func (ts *RelayMeterTestSuite) SetupSuite() {
 	err = ts.runInfluxTasks() // Manually run the Influx tasks (takes ~40 seconds)
 	ts.NoError(err)
 
-	<-time.After(65 * time.Second) // Wait 65 seconds for collector to run and write to Postgres
+	<-time.After(60 * time.Second) // Wait 65 seconds for collector to run and write to Postgres
 }
 
 // Sets the time period vars for the test (00:00.000 to 23:59:59.999 UTC of current day)
