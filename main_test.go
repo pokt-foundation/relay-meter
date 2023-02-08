@@ -390,8 +390,6 @@ type (
 
 // SetupSuite runs before each test suite run - takes just over 1 minute to complete
 func (ts *RelayMeterTestSuite) SetupSuite() {
-	// <-time.After(20 * time.Second) // Wait for Docker env to finish setting up
-
 	ts.configureTimePeriod() // Configure time period for test
 
 	ts.httpClient = httpclient.NewClient( // HTTP client to test API Server and populate PHD DB
@@ -414,7 +412,7 @@ func (ts *RelayMeterTestSuite) SetupSuite() {
 
 	err = ts.runInfluxTasks() // Manually run the Influx tasks (takes ~40 seconds)
 	ts.NoError(err)
-	<-time.After(30 * time.Second) // Wait 30 seconds for collector to run and write to Postgres
+	<-time.After(45 * time.Second) // Wait 30 seconds for collector to run and write to Postgres
 }
 
 // Sets the time period vars for the test (00:00.000 to 23:59:59.999 UTC of current day)
@@ -512,7 +510,7 @@ func (ts *RelayMeterTestSuite) runInfluxTasks() error {
 			return err
 		}
 
-		taskOffset := "10s"
+		taskOffset := "1s"
 		task.Offset = &taskOffset
 		task, err = tasksAPI.UpdateTask(ctx, task)
 		if err != nil {
