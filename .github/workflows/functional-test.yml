@@ -1,9 +1,8 @@
 name: Functional Tests
 
 on:
-  push:
-    branches:
-      - functional-tests
+  schedule:
+    - cron: '0 1 * * *'
 
 env:
   RELAY_METER_URL: ${{secrets.RELAY_METER_URL}}
