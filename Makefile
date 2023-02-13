@@ -5,11 +5,11 @@ build:
 test_env_up:
 	docker-compose -f ./docker-compose.test.yml up -d --remove-orphans --build
 test_env_down:
-	docker-compose -f ./docker-compose.test.yml down --remove-orphans
+	docker-compose -f ./docker-compose.test.yml down --remove-orphans -v
 run_e2e_tests:
-	-go test ./... -run E2E -count=1;
+	-go test ./... -run E2E -count=1
 run_all_tests:
-	-go test ./... -count=1;
+	-go test ./... -count=1
 
 test_unit:
 	go test ./...  -short
