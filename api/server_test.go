@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -90,7 +91,7 @@ func TestGetHttpServer(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			httpServer := GetHttpServer(&fakeRelayMeter{}, logger.New(), map[string]bool{"dummy": true})
+			httpServer := GetHttpServer(testCtx, &fakeRelayMeter{}, logger.New(), map[string]bool{"dummy": true})
 
 			req := httptest.NewRequest("GET", tc.url, nil)
 			if !tc.failAuth {
@@ -186,7 +187,7 @@ func TestHandleAppRelays(t *testing.T) {
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleAppRelays(&fakeMeter, logger.New(), "app", w, req)
+			handleAppRelays(testCtx, &fakeMeter, logger.New(), "app", w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
@@ -274,7 +275,7 @@ func TestHandleAllAppsRelays(t *testing.T) {
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleAllAppsRelays(&fakeMeter, logger.New(), w, req)
+			handleAllAppsRelays(testCtx, &fakeMeter, logger.New(), w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
@@ -371,7 +372,7 @@ func TestHandleLoadBalancerRelays(t *testing.T) {
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleLoadBalancerRelays(&fakeMeter, logger.New(), "lb1", w, req)
+			handleLoadBalancerRelays(testCtx, &fakeMeter, logger.New(), "lb1", w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
@@ -473,7 +474,7 @@ func TestHandleAllLoadBalancersRelays(t *testing.T) {
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleAllLoadBalancersRelays(&fakeMeter, logger.New(), w, req)
+			handleAllLoadBalancersRelays(testCtx, &fakeMeter, logger.New(), w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
@@ -521,7 +522,7 @@ type fakeRelayMeter struct {
 	allLatencyResponse         []AppLatencyResponse
 }
 
-func (f *fakeRelayMeter) AppRelays(app string, from, to time.Time) (AppRelaysResponse, error) {
+func (f *fakeRelayMeter) AppRelays(ctx context.Context, app string, from, to time.Time) (AppRelaysResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
 	f.requestedApp = app
@@ -529,50 +530,50 @@ func (f *fakeRelayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRes
 	return f.response, f.responseErr
 }
 
-func (f *fakeRelayMeter) AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, error) {
+func (f *fakeRelayMeter) AllAppsRelays(ctx context.Context, from, to time.Time) ([]AppRelaysResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
 
 	return f.allResponse, f.responseErr
 }
 
-func (f *fakeRelayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResponse, error) {
+func (f *fakeRelayMeter) UserRelays(ctx context.Context, user string, from, to time.Time) (UserRelaysResponse, error) {
 	return UserRelaysResponse{}, nil
 }
 
-func (f *fakeRelayMeter) TotalRelays(from, to time.Time) (TotalRelaysResponse, error) {
+func (f *fakeRelayMeter) TotalRelays(ctx context.Context, from, to time.Time) (TotalRelaysResponse, error) {
 	return TotalRelaysResponse{}, nil
 }
 
-func (f *fakeRelayMeter) LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error) {
+func (f *fakeRelayMeter) LoadBalancerRelays(ctx context.Context, endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.loadbalancerRelaysResponse, f.responseErr
 }
 
-func (f *fakeRelayMeter) AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error) {
+func (f *fakeRelayMeter) AllLoadBalancersRelays(ctx context.Context, from, to time.Time) ([]LoadBalancerRelaysResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.allLoadBalancersResponse, f.responseErr
 }
 
-func (f *fakeRelayMeter) AllRelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error) {
+func (f *fakeRelayMeter) AllRelaysOrigin(ctx context.Context, from, to time.Time) ([]OriginClassificationsResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.allClassificationsResponse, f.responseErr
 }
 
-func (f *fakeRelayMeter) RelaysOrigin(origin string, from, to time.Time) (OriginClassificationsResponse, error) {
+func (f *fakeRelayMeter) RelaysOrigin(ctx context.Context, origin string, from, to time.Time) (OriginClassificationsResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.allClassificationsResponse[0], f.responseErr
 }
 
-func (f *fakeRelayMeter) AllAppsLatencies() ([]AppLatencyResponse, error) {
+func (f *fakeRelayMeter) AllAppsLatencies(ctx context.Context) ([]AppLatencyResponse, error) {
 	return f.allLatencyResponse, f.responseErr
 }
 
-func (f *fakeRelayMeter) AppLatency(app string) (AppLatencyResponse, error) {
+func (f *fakeRelayMeter) AppLatency(ctx context.Context, app string) (AppLatencyResponse, error) {
 	f.requestedApp = app
 	return f.latencyResponse, f.responseErr
 }

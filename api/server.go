@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,77 +45,77 @@ type ErrorResponse struct {
 	Message string
 }
 
-func handleAppRelays(meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
+func handleAppRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AppRelays(app, from, to)
+		return meter.AppRelays(ctx, app, from, to)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleAllAppsRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+func handleAllAppsRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AllAppsRelays(from, to)
+		return meter.AllAppsRelays(ctx, from, to)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleUserRelays(meter RelayMeter, l *logger.Logger, user string, w http.ResponseWriter, req *http.Request) {
+func handleUserRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, user string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.UserRelays(user, from, to)
+		return meter.UserRelays(ctx, user, from, to)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleLoadBalancerRelays(meter RelayMeter, l *logger.Logger, endpoint string, w http.ResponseWriter, req *http.Request) {
+func handleLoadBalancerRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, endpoint string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.LoadBalancerRelays(endpoint, from, to)
+		return meter.LoadBalancerRelays(ctx, endpoint, from, to)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleAllLoadBalancersRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+func handleAllLoadBalancersRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AllLoadBalancersRelays(from, to)
+		return meter.AllLoadBalancersRelays(ctx, from, to)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleTotalRelays(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+func handleTotalRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.TotalRelays(from, to)
+		return meter.TotalRelays(ctx, from, to)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleSpecificOriginClassification(meter RelayMeter, l *logger.Logger, origin string, w http.ResponseWriter, req *http.Request) {
+func handleSpecificOriginClassification(ctx context.Context, meter RelayMeter, l *logger.Logger, origin string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.RelaysOrigin(origin, from, to)
+		return meter.RelaysOrigin(ctx, origin, from, to)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleOriginClassification(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+func handleOriginClassification(ctx context.Context, meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AllRelaysOrigin(from, to)
+		return meter.AllRelaysOrigin(ctx, from, to)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleAppLatency(meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
+func handleAppLatency(ctx context.Context, meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AppLatency(app)
+		return meter.AppLatency(ctx, app)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleAllAppsLatency(meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+func handleAllAppsLatency(ctx context.Context, meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AllAppsLatencies()
+		return meter.AllAppsLatencies(ctx)
 	}
-	handleEndpoint(l, meterEndpoint, w, req)
+	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleEndpoint(l *logger.Logger, meterEndpoint func(from, to time.Time) (any, error), w http.ResponseWriter, req *http.Request) {
+func handleEndpoint(ctx context.Context, l *logger.Logger, meterEndpoint func(from, to time.Time) (any, error), w http.ResponseWriter, req *http.Request) {
 	log := l.WithFields(logger.Fields{"Request": req})
 	w.Header().Add("Content-Type", "application/json")
 
@@ -193,7 +194,7 @@ func timePeriod(req *http.Request) (time.Time, time.Time, error) {
 // TODO: Return 304, i.e. Not Modified, if relevant
 // TODO: 'Accepts' Header in the request
 // serves: /relays/apps
-func GetHttpServer(meter RelayMeter, l *logger.Logger, apiKeys map[string]bool) func(w http.ResponseWriter, req *http.Request) {
+func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiKeys map[string]bool) func(w http.ResponseWriter, req *http.Request) {
 	match := func(r *regexp.Regexp, p string) string {
 		matches := r.FindStringSubmatch(p)
 		if len(matches) != 2 {
@@ -221,52 +222,52 @@ func GetHttpServer(meter RelayMeter, l *logger.Logger, apiKeys map[string]bool) 
 		}
 
 		if appID := match(appsRelaysPath, req.URL.Path); appID != "" {
-			handleAppRelays(meter, l, appID, w, req)
+			handleAppRelays(ctx, meter, l, appID, w, req)
 			return
 		}
 
 		if userID := match(usersRelaysPath, req.URL.Path); userID != "" {
-			handleUserRelays(meter, l, userID, w, req)
+			handleUserRelays(ctx, meter, l, userID, w, req)
 			return
 		}
 
 		if lbID := match(lbRelaysPath, req.URL.Path); lbID != "" {
-			handleLoadBalancerRelays(meter, l, lbID, w, req)
+			handleLoadBalancerRelays(ctx, meter, l, lbID, w, req)
 			return
 		}
 
 		if appID := match(appsLatencyPath, req.URL.Path); appID != "" {
-			handleAppLatency(meter, l, appID, w, req)
+			handleAppLatency(ctx, meter, l, appID, w, req)
 			return
 		}
 
 		if allAppsRelaysPath.Match([]byte(req.URL.Path)) {
-			handleAllAppsRelays(meter, l, w, req)
+			handleAllAppsRelays(ctx, meter, l, w, req)
 			return
 		}
 
 		if allLbsRelaysPath.Match([]byte(req.URL.Path)) {
-			handleAllLoadBalancersRelays(meter, l, w, req)
+			handleAllLoadBalancersRelays(ctx, meter, l, w, req)
 			return
 		}
 
 		if origin := match(specificOriginUsagePath, req.URL.Path); origin != "" {
-			handleSpecificOriginClassification(meter, l, origin, w, req)
+			handleSpecificOriginClassification(ctx, meter, l, origin, w, req)
 			return
 		}
 
 		if originUsagePath.Match([]byte(req.URL.Path)) {
-			handleOriginClassification(meter, l, w, req)
+			handleOriginClassification(ctx, meter, l, w, req)
 			return
 		}
 
 		if totalRelaysPath.Match([]byte(req.URL.Path)) {
-			handleTotalRelays(meter, l, w, req)
+			handleTotalRelays(ctx, meter, l, w, req)
 			return
 		}
 
 		if allAppsLatencyPath.Match([]byte(req.URL.Path)) {
-			handleAllAppsLatency(meter, l, w, req)
+			handleAllAppsLatency(ctx, meter, l, w, req)
 			return
 		}
 

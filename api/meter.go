@@ -30,17 +30,18 @@ var (
 
 type RelayMeter interface {
 	// AppRelays returns total number of relays for the app over the specified time period
-	AppRelays(app string, from, to time.Time) (AppRelaysResponse, error)
-	AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, error)
-	UserRelays(user string, from, to time.Time) (UserRelaysResponse, error)
-	TotalRelays(from, to time.Time) (TotalRelaysResponse, error)
+	AppRelays(ctx context.Context, app string, from, to time.Time) (AppRelaysResponse, error)
+	AllAppsRelays(ctx context.Context, from, to time.Time) ([]AppRelaysResponse, error)
+	UserRelays(ctx context.Context, user string, from, to time.Time) (UserRelaysResponse, error)
+	TotalRelays(ctx context.Context, from, to time.Time) (TotalRelaysResponse, error)
+
 	// LoadBalancerRelays returns the metrics for an Endpoint, AKA loadbalancer
-	LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
-	AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error)
-	AppLatency(app string) (AppLatencyResponse, error)
-	AllAppsLatencies() ([]AppLatencyResponse, error)
-	AllRelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error)
-	RelaysOrigin(origin string, from, to time.Time) (OriginClassificationsResponse, error)
+	LoadBalancerRelays(ctx context.Context, endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
+	AllLoadBalancersRelays(ctx context.Context, from, to time.Time) ([]LoadBalancerRelaysResponse, error)
+	AppLatency(ctx context.Context, app string) (AppLatencyResponse, error)
+	AllAppsLatencies(ctx context.Context) ([]AppLatencyResponse, error)
+	AllRelaysOrigin(ctx context.Context, from, to time.Time) ([]OriginClassificationsResponse, error)
+	RelaysOrigin(ctx context.Context, origin string, from, to time.Time) (OriginClassificationsResponse, error)
 }
 
 type RelayCounts struct {
@@ -110,21 +111,24 @@ type Backend interface {
 	TodaysUsage() (map[string]RelayCounts, error)
 	TodaysLatency() (map[string][]Latency, error)
 	TodaysOriginUsage() (map[string]RelayCounts, error)
+
 	// Is expected to return the list of applicationIDs owned by the user
-	UserApps(user string) ([]string, error)
+	UserApps(ctx context.Context, user string) ([]string, error)
 	// LoadBalancer returns the full load balancer struct
-	LoadBalancer(endpoint string) (*types.LoadBalancer, error)
-	LoadBalancers() ([]*types.LoadBalancer, error)
+	LoadBalancer(ctx context.Context, endpoint string) (*types.LoadBalancer, error)
+	LoadBalancers(ctx context.Context) ([]*types.LoadBalancer, error)
 }
 
-func NewRelayMeter(backend Backend, logger *logger.Logger, options RelayMeterOptions) RelayMeter {
+func NewRelayMeter(ctx context.Context, backend Backend, logger *logger.Logger, options RelayMeterOptions) RelayMeter {
 	// PG client
 	meter := &relayMeter{
 		Backend:           backend,
 		Logger:            logger,
 		RelayMeterOptions: options,
 	}
-	go func() { meter.StartDataLoader(context.Background()) }()
+
+	go func() { meter.StartDataLoader(ctx) }()
+
 	return meter
 }
 
@@ -235,7 +239,7 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 // Both parameters are assumed to be in the same timezone as the source of the data, i.e. influx
 //
 //	The From parameter is taken to mean the very start of the day that it specifies: the returned result includes all such relays
-func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysResponse, error) {
+func (r *relayMeter) AppRelays(ctx context.Context, app string, from, to time.Time) (AppRelaysResponse, error) {
 	r.Logger.WithFields(logger.Fields{"app": app, "from": from, "to": to}).Info("apiserver: Received AppRelays request")
 	resp := AppRelaysResponse{
 		From:        from,
@@ -279,7 +283,7 @@ func (r *relayMeter) AppRelays(app string, from, to time.Time) (AppRelaysRespons
 	return resp, nil
 }
 
-func (r *relayMeter) AppLatency(app string) (AppLatencyResponse, error) {
+func (r *relayMeter) AppLatency(ctx context.Context, app string) (AppLatencyResponse, error) {
 	r.Logger.WithFields(logger.Fields{"app": app}).Info("apiserver: Received AppLatency request")
 
 	appLatency := r.todaysLatency[app]
@@ -300,7 +304,7 @@ func (r *relayMeter) AppLatency(app string) (AppLatencyResponse, error) {
 	}, nil
 }
 
-func (r *relayMeter) AllAppsLatencies() ([]AppLatencyResponse, error) {
+func (r *relayMeter) AllAppsLatencies(ctx context.Context) ([]AppLatencyResponse, error) {
 	r.Logger.Info("apiserver: Received AllAppsLatencies request")
 
 	resp := []AppLatencyResponse{}
@@ -325,7 +329,7 @@ func (r *relayMeter) AllAppsLatencies() ([]AppLatencyResponse, error) {
 	return resp, nil
 }
 
-func (r *relayMeter) AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, error) {
+func (r *relayMeter) AllAppsRelays(ctx context.Context, from, to time.Time) ([]AppRelaysResponse, error) {
 	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received AllAppRelays request")
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -389,7 +393,7 @@ func (r *relayMeter) AllAppsRelays(from, to time.Time) ([]AppRelaysResponse, err
 	return resp, nil
 }
 
-func (r *relayMeter) AllRelaysOrigin(from, to time.Time) ([]OriginClassificationsResponse, error) {
+func (r *relayMeter) AllRelaysOrigin(ctx context.Context, from, to time.Time) ([]OriginClassificationsResponse, error) {
 	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received classifications by origin request")
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -429,7 +433,7 @@ func (r *relayMeter) AllRelaysOrigin(from, to time.Time) ([]OriginClassification
 	return resp, nil
 }
 
-func (r *relayMeter) RelaysOrigin(origin string, from, to time.Time) (OriginClassificationsResponse, error) {
+func (r *relayMeter) RelaysOrigin(ctx context.Context, origin string, from, to time.Time) (OriginClassificationsResponse, error) {
 	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received classifications by origin request")
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -467,7 +471,7 @@ func (r *relayMeter) RelaysOrigin(origin string, from, to time.Time) (OriginClas
 }
 
 // TODO: refactor the common processing done by both AppRelays and UserRelays
-func (r *relayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResponse, error) {
+func (r *relayMeter) UserRelays(ctx context.Context, user string, from, to time.Time) (UserRelaysResponse, error) {
 	r.Logger.WithFields(logger.Fields{"user": user, "from": from, "to": to}).Info("apiserver: Received UserRelays request")
 	resp := UserRelaysResponse{
 		From: from,
@@ -486,7 +490,7 @@ func (r *relayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResp
 	now := time.Now()
 	_, today, _ := AdjustTimePeriod(now, now)
 
-	apps, err := r.Backend.UserApps(user)
+	apps, err := r.Backend.UserApps(ctx, user)
 	if err != nil {
 		r.Logger.WithFields(logger.Fields{"user": user, "from": from, "to": to, "error": err}).Warn("Error getting user applications processing UserRelays request")
 		return resp, err
@@ -522,7 +526,7 @@ func (r *relayMeter) UserRelays(user string, from, to time.Time) (UserRelaysResp
 	return resp, nil
 }
 
-func (r *relayMeter) TotalRelays(from, to time.Time) (TotalRelaysResponse, error) {
+func (r *relayMeter) TotalRelays(ctx context.Context, from, to time.Time) (TotalRelaysResponse, error) {
 	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received TotalRelays request")
 	resp := TotalRelaysResponse{
 		From: from,
@@ -570,7 +574,7 @@ func (r *relayMeter) TotalRelays(from, to time.Time) (TotalRelaysResponse, error
 }
 
 // LoadBalancerRelays returns the metrics for all applications of a load balancer (AKA endpoint)
-func (r *relayMeter) LoadBalancerRelays(endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error) {
+func (r *relayMeter) LoadBalancerRelays(ctx context.Context, endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error) {
 	r.Logger.WithFields(logger.Fields{"endpoint": endpoint, "from": from, "to": to}).Info("apiserver: Received LoadBalancerRelays request")
 	resp := LoadBalancerRelaysResponse{
 		From:     from,
@@ -589,7 +593,7 @@ func (r *relayMeter) LoadBalancerRelays(endpoint string, from, to time.Time) (Lo
 	now := time.Now()
 	_, today, _ := AdjustTimePeriod(now, now)
 
-	lb, err := r.Backend.LoadBalancer(endpoint)
+	lb, err := r.Backend.LoadBalancer(ctx, endpoint)
 	if err != nil {
 		r.Logger.WithFields(logger.Fields{"endpoint": endpoint, "from": from, "to": to, "error": err}).Warn("Error getting endpoint/loadbalancer applications processing LoadBalancerRelays request")
 		return resp, err
@@ -637,7 +641,7 @@ func (r *relayMeter) LoadBalancerRelays(endpoint string, from, to time.Time) (Lo
 }
 
 // AllLoadBalancersRelays returns the metrics for all applications of all load balancers (AKA endpoints)
-func (r *relayMeter) AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerRelaysResponse, error) {
+func (r *relayMeter) AllLoadBalancersRelays(ctx context.Context, from, to time.Time) ([]LoadBalancerRelaysResponse, error) {
 	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received AllLoadBalancerRelays request")
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -651,7 +655,7 @@ func (r *relayMeter) AllLoadBalancersRelays(from, to time.Time) ([]LoadBalancerR
 	now := time.Now()
 	_, today, _ := AdjustTimePeriod(now, now)
 
-	lbs, err := r.Backend.LoadBalancers()
+	lbs, err := r.Backend.LoadBalancers(ctx)
 	if err != nil {
 		r.Logger.WithFields(logger.Fields{"from": from, "to": to, "error": err}).Warn("Error getting endpoint/loadbalancers applications processing AllLoadBalancerRelays request")
 		return nil, err
