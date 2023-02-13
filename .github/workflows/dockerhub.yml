@@ -1,17 +1,21 @@
 name: docker
 
 on:
-  workflow_run:
-    workflows: ["Build & Test"]
-    branches: [main]
-    types:
-      - completed
   push:
-    tags:
-      - '*'
-  pull_request:
-    branches:
-      - 'main'
+    branches: ["never"]
+# TODO reenable if needed (currently not used)
+# on:
+#   workflow_run:
+#     workflows: ["Build & Test"]
+#     branches: [main]
+#     types:
+#       - completed
+#   push:
+#     tags:
+#       - '*'
+#   pull_request:
+#     branches:
+#       - 'main'
 
 jobs:
   docker-collector:
