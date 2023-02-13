@@ -94,7 +94,7 @@ services:
     environment:
       POSTGRES_PASSWORD: pgpassword
     volumes:
-      - ./schema.test.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./testdata/schema.test.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: pg_isready -U postgres -p 5434
       interval: 5s

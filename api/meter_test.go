@@ -15,8 +15,6 @@ import (
 	"github.com/pokt-foundation/utils-go/numbers"
 )
 
-var testCtx = context.Background()
-
 func TestUserRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
 	usageData := fakeDailyMetrics()
@@ -92,9 +90,9 @@ func TestUserRelays(t *testing.T) {
 				},
 			}
 
-			relayMeter := NewRelayMeter(testCtx, &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			got, err := relayMeter.UserRelays(testCtx, tc.user, tc.from, tc.to)
+			got, err := relayMeter.UserRelays(context.Background(), tc.user, tc.from, tc.to)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -167,9 +165,9 @@ func TestTotalRelays(t *testing.T) {
 				todaysUsage: todaysUsage,
 			}
 
-			relayMeter := NewRelayMeter(testCtx, &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			got, err := relayMeter.TotalRelays(testCtx, tc.from, tc.to)
+			got, err := relayMeter.TotalRelays(context.Background(), tc.from, tc.to)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -347,9 +345,9 @@ func TestAppRelays(t *testing.T) {
 				todaysUsage: todaysUsage,
 			}
 
-			relayMeter := NewRelayMeter(testCtx, &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			got, err := relayMeter.AppRelays(testCtx, requestedApp, tc.from, tc.to)
+			got, err := relayMeter.AppRelays(context.Background(), requestedApp, tc.from, tc.to)
 			if err != nil {
 				if tc.expectedErr == nil {
 					t.Fatalf("Unexpected error: %v", err)
@@ -707,9 +705,9 @@ func TestAllAppsRelays(t *testing.T) {
 				todaysUsage: todaysUsage,
 			}
 
-			relayMeter := NewRelayMeter(testCtx, &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			rawGot, err := relayMeter.AllAppsRelays(testCtx, tc.from, tc.to)
+			rawGot, err := relayMeter.AllAppsRelays(context.Background(), tc.from, tc.to)
 			if err != nil {
 				if tc.expectedErr == nil {
 					t.Fatalf("Unexpected error: %v", err)
@@ -777,9 +775,9 @@ func TestAppLatency(t *testing.T) {
 				err:           tc.backendErr,
 			}
 
-			relayMeter := NewRelayMeter(testCtx, &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			got, err := relayMeter.AppLatency(testCtx, tc.requestedApp)
+			got, err := relayMeter.AppLatency(context.Background(), tc.requestedApp)
 			if err != nil {
 				if tc.expectedErr == nil {
 					t.Fatalf("Unexpected error: %v", err)
@@ -861,9 +859,9 @@ func TestAllAppsLatencies(t *testing.T) {
 				err:           tc.backendErr,
 			}
 
-			relayMeter := NewRelayMeter(testCtx, &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			rawGot, err := relayMeter.AllAppsLatencies(testCtx)
+			rawGot, err := relayMeter.AllAppsLatencies(context.Background())
 
 			if err != nil {
 				if tc.expectedErr == nil {
@@ -989,9 +987,9 @@ func TestLoadBalancerRelays(t *testing.T) {
 				err: tc.backendErr,
 			}
 
-			relayMeter := NewRelayMeter(testCtx, &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			got, err := relayMeter.LoadBalancerRelays(testCtx, tc.loadbalancer, tc.from, tc.to)
+			got, err := relayMeter.LoadBalancerRelays(context.Background(), tc.loadbalancer, tc.from, tc.to)
 			if err != nil && !errors.Is(err, tc.expectedErr) {
 				t.Fatalf("Expected error: %v, got: %v", tc.expectedErr, err)
 			}
@@ -1135,9 +1133,9 @@ func TestAllLoadBalancersRelays(t *testing.T) {
 				err: tc.backendErr,
 			}
 
-			relayMeter := NewRelayMeter(testCtx, &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			rawGot, err := relayMeter.AllLoadBalancersRelays(testCtx, tc.from, tc.to)
+			rawGot, err := relayMeter.AllLoadBalancersRelays(context.Background(), tc.from, tc.to)
 			if err != nil && !errors.Is(err, tc.expectedErr) {
 				t.Fatalf("Expected error: %v, got: %v", tc.expectedErr, err)
 			}
@@ -1336,9 +1334,9 @@ func TestAllRelaysOrigin(t *testing.T) {
 				todaysOriginUsage: todaysUsage,
 			}
 
-			relayMeter := NewRelayMeter(testCtx, &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			rawGot, err := relayMeter.AllRelaysOrigin(testCtx, tc.from, tc.to)
+			rawGot, err := relayMeter.AllRelaysOrigin(context.Background(), tc.from, tc.to)
 			if err != nil {
 				if tc.expectedErr == nil {
 					t.Fatalf("Unexpected error: %v", err)

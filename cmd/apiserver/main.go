@@ -20,17 +20,17 @@ import (
 )
 
 const (
-	relayMeterAPIKeys = "API_KEYS"
-	phdBaseURL        = "BACKEND_API_URL"
-	phdAPIKey         = "BACKEND_API_TOKEN"
+	RELAY_METER_API_KEYS = "API_KEYS"
+	PHD_BASE_URL         = "BACKEND_API_URL"
+	PHD_API_KEY          = "BACKEND_API_TOKEN"
 
-	loadIntervalSeconds     = "LOAD_INTERVAL_SECONDS"
-	failtMetricsTTLSeconds  = "DAILY_METRICS_TTL_SECONDS"
-	todaysMetricsTTLSeconds = "TODAYS_METRICS_TTL_SECONDS"
-	maxArchiveAgeDays       = "MAX_ARCHIVE_AGE"
-	serverPort              = "API_SERVER_PORT"
-	httpTimeout             = "HTTP_TIMEOUT"
-	httpRetries             = "HTTP_RETRIES"
+	LOAD_INTERVAL_SECONDS      = "LOAD_INTERVAL_SECONDS"
+	DAILY_METRICS_TTL_SECONDS  = "DAILY_METRICS_TTL_SECONDS"
+	TODAYS_METRICS_TTL_SECONDS = "TODAYS_METRICS_TTL_SECONDS"
+	MAX_ARCHIVE_AGE            = "MAX_ARCHIVE_AGE"
+	API_SERVER_PORT            = "API_SERVER_PORT"
+	HTTP_TIMEOUT               = "HTTP_TIMEOUT"
+	HTTP_RETRIES               = "HTTP_RETRIES"
 
 	defaultLoadIntervalSeconds      = 30
 	defaultDailyMetricsTTLSeconds   = 120
@@ -57,17 +57,17 @@ type options struct {
 
 func gatherOptions() options {
 	return options{
-		relayMeterAPIKeys: environment.MustGetStringMap(relayMeterAPIKeys, ";"),
-		phdBaseURL:        environment.MustGetString(phdBaseURL),
-		phdAPIKey:         environment.MustGetString(phdAPIKey),
+		relayMeterAPIKeys: environment.MustGetStringMap(RELAY_METER_API_KEYS, ";"),
+		phdBaseURL:        environment.MustGetString(PHD_BASE_URL),
+		phdAPIKey:         environment.MustGetString(PHD_API_KEY),
 
-		loadInterval:            int(environment.GetInt64(loadIntervalSeconds, defaultLoadIntervalSeconds)),
-		dailyMetricsTTLSeconds:  int(environment.GetInt64(failtMetricsTTLSeconds, defaultDailyMetricsTTLSeconds)),
-		todaysMetricsTTLSeconds: int(environment.GetInt64(todaysMetricsTTLSeconds, defaultsTodaysMetricsTTLSeconds)),
-		maxPastDays:             int(environment.GetInt64(maxArchiveAgeDays, defaultMaxArchiveAgeDays)),
-		timeout:                 time.Duration(environment.GetInt64(httpTimeout, defaultHTTPTimeoutSeconds)) * time.Second,
-		retries:                 int(environment.GetInt64(httpRetries, defaultHTTPRetries)),
-		port:                    int(environment.GetInt64(serverPort, defaultServerPort)),
+		loadInterval:            int(environment.GetInt64(LOAD_INTERVAL_SECONDS, defaultLoadIntervalSeconds)),
+		dailyMetricsTTLSeconds:  int(environment.GetInt64(DAILY_METRICS_TTL_SECONDS, defaultDailyMetricsTTLSeconds)),
+		todaysMetricsTTLSeconds: int(environment.GetInt64(TODAYS_METRICS_TTL_SECONDS, defaultsTodaysMetricsTTLSeconds)),
+		maxPastDays:             int(environment.GetInt64(MAX_ARCHIVE_AGE, defaultMaxArchiveAgeDays)),
+		timeout:                 time.Duration(environment.GetInt64(HTTP_TIMEOUT, defaultHTTPTimeoutSeconds)) * time.Second,
+		retries:                 int(environment.GetInt64(HTTP_RETRIES, defaultHTTPRetries)),
+		port:                    int(environment.GetInt64(API_SERVER_PORT, defaultServerPort)),
 	}
 }
 

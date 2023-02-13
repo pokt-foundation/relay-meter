@@ -91,7 +91,7 @@ func TestGetHttpServer(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			httpServer := GetHttpServer(testCtx, &fakeRelayMeter{}, logger.New(), map[string]bool{"dummy": true})
+			httpServer := GetHttpServer(context.Background(), &fakeRelayMeter{}, logger.New(), map[string]bool{"dummy": true})
 
 			req := httptest.NewRequest("GET", tc.url, nil)
 			if !tc.failAuth {
@@ -187,7 +187,7 @@ func TestHandleAppRelays(t *testing.T) {
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleAppRelays(testCtx, &fakeMeter, logger.New(), "app", w, req)
+			handleAppRelays(context.Background(), &fakeMeter, logger.New(), "app", w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
@@ -275,7 +275,7 @@ func TestHandleAllAppsRelays(t *testing.T) {
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleAllAppsRelays(testCtx, &fakeMeter, logger.New(), w, req)
+			handleAllAppsRelays(context.Background(), &fakeMeter, logger.New(), w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
@@ -372,7 +372,7 @@ func TestHandleLoadBalancerRelays(t *testing.T) {
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleLoadBalancerRelays(testCtx, &fakeMeter, logger.New(), "lb1", w, req)
+			handleLoadBalancerRelays(context.Background(), &fakeMeter, logger.New(), "lb1", w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
@@ -474,7 +474,7 @@ func TestHandleAllLoadBalancersRelays(t *testing.T) {
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleAllLoadBalancersRelays(testCtx, &fakeMeter, logger.New(), w, req)
+			handleAllLoadBalancersRelays(context.Background(), &fakeMeter, logger.New(), w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
