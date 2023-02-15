@@ -1,0 +1,35 @@
+name: Functional Tests
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+
+env:
+  RELAY_METER_URL: ${{secrets.RELAY_METER_URL}}
+  RELAY_METER_API_KEY: ${{secrets.RELAY_METER_API_KEY}}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.18
+
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run Functional tests
+        run: make run_functional_tests
