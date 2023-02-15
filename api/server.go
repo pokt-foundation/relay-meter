@@ -206,6 +206,10 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 	return func(w http.ResponseWriter, req *http.Request) {
 		log := l.WithFields(logger.Fields{"Request": *req})
 
+		if strings.HasPrefix(req.URL.Path, "/v0") {
+			log.Error("Use of deprecared v0")
+		}
+
 		if strings.HasPrefix(req.URL.Path, "/v1") && !apiKeys[req.Header.Get("Authorization")] {
 			w.WriteHeader(http.StatusUnauthorized)
 			_, err := w.Write([]byte("Unauthorized"))
