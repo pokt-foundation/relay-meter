@@ -21,16 +21,16 @@ const (
 
 var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
-	appsRelaysPath          = regexp.MustCompile(`^/v[0-1]/relays/apps/([[:alnum:]_]+)$`)
-	allAppsRelaysPath       = regexp.MustCompile(`^/v[0-1]/relays/apps`)
-	usersRelaysPath         = regexp.MustCompile(`^/v[0-1]/relays/users/([[:alnum:]_]+)$`)
-	lbRelaysPath            = regexp.MustCompile(`^/v[0-1]/relays/endpoints/([[:alnum:]_]+)$`)
-	allLbsRelaysPath        = regexp.MustCompile(`^/v[0-1]/relays/endpoints`)
-	totalRelaysPath         = regexp.MustCompile(`^/v[0-1]/relays`)
-	originUsagePath         = regexp.MustCompile(`^/v[0-1]/relays/origin-classification`)
-	specificOriginUsagePath = regexp.MustCompile(`^/v[0-1]/relays/origin-classification/([[:alnum:]_].*)`)
-	appsLatencyPath         = regexp.MustCompile(`^/v[0-1]/latency/apps/([[:alnum:]_]+)$`)
-	allAppsLatencyPath      = regexp.MustCompile(`^/v[0-1]/latency/apps`)
+	appsRelaysPath          = regexp.MustCompile(`^/v1/relays/apps/([[:alnum:]_]+)$`)
+	allAppsRelaysPath       = regexp.MustCompile(`^/v1/relays/apps`)
+	usersRelaysPath         = regexp.MustCompile(`^/v1/relays/users/([[:alnum:]_]+)$`)
+	lbRelaysPath            = regexp.MustCompile(`^/v1/relays/endpoints/([[:alnum:]_]+)$`)
+	allLbsRelaysPath        = regexp.MustCompile(`^/v1/relays/endpoints`)
+	totalRelaysPath         = regexp.MustCompile(`^/v1/relays`)
+	originUsagePath         = regexp.MustCompile(`^/v1/relays/origin-classification`)
+	specificOriginUsagePath = regexp.MustCompile(`^/v1/relays/origin-classification/([[:alnum:]_].*)`)
+	appsLatencyPath         = regexp.MustCompile(`^/v1/latency/apps/([[:alnum:]_]+)$`)
+	allAppsLatencyPath      = regexp.MustCompile(`^/v1/latency/apps`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -205,10 +205,6 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 
 	return func(w http.ResponseWriter, req *http.Request) {
 		log := l.WithFields(logger.Fields{"Request": *req})
-
-		if strings.HasPrefix(req.URL.Path, "/v0") {
-			log.Error("Use of deprecared v0")
-		}
 
 		if strings.HasPrefix(req.URL.Path, "/v1") && !apiKeys[req.Header.Get("Authorization")] {
 			w.WriteHeader(http.StatusUnauthorized)
