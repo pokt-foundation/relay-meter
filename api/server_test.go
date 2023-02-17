@@ -27,7 +27,7 @@ func TestGetHttpServer(t *testing.T) {
 	}{
 		{
 			name: "App relays path is handled correctly",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/apps/app?from=%s&to=%s",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/apps/app?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -35,7 +35,7 @@ func TestGetHttpServer(t *testing.T) {
 		},
 		{
 			name: "User relays path is handled correctly",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/users/user?from=%s&to=%s",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/users/user?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -43,7 +43,7 @@ func TestGetHttpServer(t *testing.T) {
 		},
 		{
 			name: "All apps relays path is handled correctly",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/apps?from=%s&to=%s",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/apps?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -51,7 +51,7 @@ func TestGetHttpServer(t *testing.T) {
 		},
 		{
 			name: "Total relays path is handled correctly",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays?from=%s&to=%s",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -59,7 +59,7 @@ func TestGetHttpServer(t *testing.T) {
 		},
 		{
 			name: "All load balancers relays path is handled correctly",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/endpoints?from=%s&to=%s",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/endpoints?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -72,7 +72,7 @@ func TestGetHttpServer(t *testing.T) {
 		},
 		{
 			name: "Origin usage path is handled correctly",
-			url: fmt.Sprint("http://relay-meter.pokt.network/v1/relays/origin-classification",
+			url: fmt.Sprint("http://relay-meter.pokt.network/v0/relays/origin-classification",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -180,7 +180,7 @@ func TestHandleAppRelays(t *testing.T) {
 				responseErr: tc.meterErr,
 			}
 
-			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/apps/app?from=%s&to=%s",
+			url := fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/apps/app?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			)
@@ -268,7 +268,7 @@ func TestHandleAllAppsRelays(t *testing.T) {
 				responseErr: tc.meterErr,
 			}
 
-			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/apps?from=%s&to=%s",
+			url := fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/apps?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			)
@@ -365,7 +365,7 @@ func TestHandleLoadBalancerRelays(t *testing.T) {
 				responseErr:                tc.meterErr,
 			}
 
-			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/endpoints/lb1?from=%s&to=%s",
+			url := fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/endpoints/lb1?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			)
@@ -467,7 +467,7 @@ func TestHandleAllLoadBalancersRelays(t *testing.T) {
 				responseErr:              tc.meterErr,
 			}
 
-			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/endpoints/lb1?from=%s&to=%s",
+			url := fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/endpoints/lb1?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			)
@@ -621,7 +621,7 @@ func TestTimePeriod(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/apps/app1?from=%s&to=%s", url.QueryEscape(tc.from), url.QueryEscape(tc.to))
+			url := fmt.Sprintf("http://relay-meter.pokt.network/v0/relays/apps/app1?from=%s&to=%s", url.QueryEscape(tc.from), url.QueryEscape(tc.to))
 			req := httptest.NewRequest("GET", url, nil)
 			gotFrom, gotTo, err := timePeriod(req)
 			if err != nil {
