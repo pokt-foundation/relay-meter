@@ -19,3 +19,4 @@ tmp
 tmp/*
 
 pre-commit-2.20.0.pyz
+*.pyz
