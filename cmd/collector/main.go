@@ -18,6 +18,7 @@ const (
 	collectingIntervalSeconds = "COLLECTION_INTERVAL_SECONDS"
 	reportIntervalSeconds     = "REPORT_INTERVAL_SECONDS"
 	maxArchiveAgeDays         = "MAX_ARCHIVE_AGE"
+	influxDBTokenNotFound     = "Error getting influxDB token: No token found"
 
 	defaultCollectIntervalSeconds = 300
 	defaultReportIntervalSeconds  = 30
@@ -40,7 +41,15 @@ func gatherOptions() options {
 
 // TODO: need a /health endpoint
 func main() {
+	log := logger.New()
+	log.Formatter = &logger.JSONFormatter{}
+
 	influxOptions := cmd.GatherInfluxOptions()
+	if influxOptions.Token == "" {
+		log.Error(influxDBTokenNotFound)
+		os.Exit(1)
+	}
+
 	postgresOptions := cmd.GatherPostgresOptions()
 
 	influxClient := db.NewInfluxDBSource(influxOptions)
@@ -53,8 +62,6 @@ func main() {
 	options := gatherOptions()
 
 	fmt.Printf("Starting the collector...")
-	log := logger.New()
-	log.Formatter = &logger.JSONFormatter{}
 
 	collector := collector.NewCollector(influxClient, pgClient, options.maxArchiveAge, log)
 	collector.Start(context.Background(), options.collectionInterval, options.reportingInterval)

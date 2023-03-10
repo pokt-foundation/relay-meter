@@ -27,7 +27,7 @@ type options struct {
 
 func GatherInfluxOptions() db.InfluxDBOptions {
 	return db.InfluxDBOptions{
-		URL:                 environment.MustGetString(INFLUXDB_URL),
+		URL:                 environment.GetString(INFLUXDB_URL, ""),
 		Token:               environment.MustGetString(INFLUXDB_TOKEN),
 		Org:                 environment.MustGetString(INFLUXDB_ORG),
 		DailyBucket:         environment.MustGetString(INFLUXDB_BUCKET_DAILY),
