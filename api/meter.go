@@ -743,14 +743,14 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 		from := time.Now().Add(max)
 		from, to, err := AdjustTimePeriod(from, time.Now())
 		if err != nil {
-			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
+			r.Logger.WithFields(logger.Fields{"error": err}).Error("Error setting timespan for data loader")
 			return
 		}
 
 		r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting data loader...")
 
 		if err := r.loadData(from, to); err != nil {
-			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
+			r.Logger.WithFields(logger.Fields{"error": err}).Error("Error setting timespan for data loader")
 		}
 	}
 
