@@ -3,6 +3,7 @@ name: Functional Tests
 on:
   schedule:
     - cron: '0 1 * * *'
+  workflow_dispatch:
 
 env:
   RELAY_METER_URL: ${{secrets.RELAY_METER_URL}}
