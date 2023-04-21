@@ -7,9 +7,9 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/influxdata/influxdb-client-go/v2 v2.9.1
 	github.com/lib/pq v1.10.7
-	github.com/pokt-foundation/db-client v1.2.2
-	github.com/pokt-foundation/portal-db v1.5.1
-	github.com/pokt-foundation/utils-go v0.2.9
+	github.com/pokt-foundation/db-client v1.7.1
+	github.com/pokt-foundation/portal-db v1.10.8
+	github.com/pokt-foundation/utils-go v0.4.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.1
 )
