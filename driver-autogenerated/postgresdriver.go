@@ -28,3 +28,12 @@ func NewPostgresDriver(connectionString string) (*PostgresDriver, error) {
 
 	return driver, nil
 }
+
+/* NewPostgresDriverFromDBInstance returns PostgresDriver instance from sdl.DB instance */
+func NewPostgresDriverFromDBInstance(db *sql.DB) *PostgresDriver {
+	driver := &PostgresDriver{
+		Queries: New(db),
+	}
+
+	return driver
+}

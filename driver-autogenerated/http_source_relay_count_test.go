@@ -17,12 +17,12 @@ func (ts *PGDriverTestSuite) TestPostgresDriver_HTTPSourceRelayCount() {
 			name: "Success",
 			count: HttpSourceRelayCount{
 				AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8", // pragma: allowlist secret
-				Day:          time.Now(),
+				Day:          time.Date(1999, time.July, 21, 0, 0, 0, 0, &time.Location{}),
 				Success:      3,
 				Error:        3,
 			},
 			times: 2,
-			day:   time.Now(),
+			day:   time.Date(1999, time.July, 21, 0, 0, 0, 0, &time.Location{}),
 			err:   nil,
 		},
 	}
