@@ -56,6 +56,6 @@ func main() {
 	log := logger.New()
 	log.Formatter = &logger.JSONFormatter{}
 
-	collector := collector.NewCollector(influxClient, pgClient, options.maxArchiveAge, log)
+	collector := collector.NewCollector([]collector.Source{influxClient}, pgClient, options.maxArchiveAge, log)
 	collector.Start(context.Background(), options.collectionInterval, options.reportingInterval)
 }
