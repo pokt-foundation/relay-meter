@@ -52,6 +52,9 @@ jobs:
       - name: Run Unit tests
         run: go test ./...  -short
 
+      - name: Run Driver tests
+        run: make test_driver
+
       # TODO: enable again when race condition is fixed
       # - name: Build the Docker test stack
       #   run: docker-compose -f ./docker-compose.test.yml up -d --build
