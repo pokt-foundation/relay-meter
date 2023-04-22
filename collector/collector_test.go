@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/pokt-foundation/relay-meter/api"
@@ -106,6 +107,115 @@ func TestCollect(t *testing.T) {
 				return
 			}
 		})
+	}
+}
+
+func TestMerge(t *testing.T) {
+	fakeDay1 := time.Date(2022, time.July, 20, 0, 0, 0, 0, &time.Location{})
+	fakeDay2 := fakeDay1.AddDate(0, 0, 1)
+	fakeDay3 := fakeDay1.AddDate(0, 0, 2)
+
+	source1 := map[time.Time]map[string]api.RelayCounts{
+		fakeDay2: {
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+				Success: 4,
+				Failure: 4,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+				Success: 4,
+				Failure: 4,
+			},
+		},
+		fakeDay1: {
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+		},
+	}
+
+	source2 := map[time.Time]map[string]api.RelayCounts{
+		fakeDay3: {
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+		},
+		fakeDay2: {
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+				Success: 4,
+				Failure: 4,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+				Success: 4,
+				Failure: 4,
+			},
+		},
+		fakeDay1: {
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+		},
+	}
+
+	expectedSource := map[time.Time]map[string]api.RelayCounts{
+		fakeDay3: {
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+		},
+		fakeDay2: {
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+				Success: 4,
+				Failure: 4,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+				Success: 4,
+				Failure: 4,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+				Success: 4,
+				Failure: 4,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+				Success: 4,
+				Failure: 4,
+			},
+		},
+		fakeDay1: {
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+				Success: 3,
+				Failure: 3,
+			},
+		},
+	}
+
+	souce := mergeRelayCountsMaps([]map[time.Time]map[string]api.RelayCounts{source1, source2})
+
+	if !cmp.Equal(souce, expectedSource) {
+		t.Errorf("Wrong object received, got=%s", cmp.Diff(expectedSource, souce))
 	}
 }
 

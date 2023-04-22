@@ -65,6 +65,19 @@ type collector struct {
 	*logger.Logger
 }
 
+func mergeRelayCountsMaps(dayMaps []map[time.Time]map[string]api.RelayCounts) map[time.Time]map[string]api.RelayCounts {
+	mergedMap := make(map[time.Time]map[string]api.RelayCounts)
+	for _, dayMap := range dayMaps {
+		for day, appMap := range dayMap {
+			if _, ok := mergedMap[day]; !ok {
+				mergedMap[day] = make(map[string]api.RelayCounts)
+			}
+			maps.Copy(mergedMap[day], appMap)
+		}
+	}
+	return mergedMap
+}
+
 // Collects relay usage data from the source and uses the writer to store.
 //
 //	-
@@ -76,7 +89,7 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 	}
 	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Daily metrics collection period adjusted.")
 
-	var counts map[time.Time]map[string]api.RelayCounts
+	var sourcesCounts []map[time.Time]map[string]api.RelayCounts
 
 	for _, source := range c.Sources {
 		sourceCounts, err := source.DailyCounts(from, to)
@@ -84,8 +97,10 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 			return err
 		}
 		c.Logger.WithFields(logger.Fields{"daily_metrics_count": len(sourceCounts), "from": from, "to": to}).Info("Collected daily metrics")
-		maps.Copy(counts, sourceCounts)
+		sourcesCounts = append(sourcesCounts, sourceCounts)
 	}
+
+	counts := mergeRelayCountsMaps(sourcesCounts)
 
 	// TODO: Add counts per origins
 	return c.Writer.WriteDailyUsage(counts, nil)
