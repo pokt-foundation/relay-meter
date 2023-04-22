@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -41,39 +42,39 @@ func (ts *PGDriverTestSuite) SetupSuite() {
 	ts.from = time.Date(2022, time.July, 20, 0, 0, 0, 0, &time.Location{})
 	ts.to = ts.from.AddDate(0, 0, 1)
 
-	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), HttpSourceRelayCount{
+	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), api.HTTPSourceRelayCount{
 		AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8", // pragma: allowlist secret
 		Day:          ts.today,
 		Success:      5,
 		Error:        5,
 	}))
-	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), HttpSourceRelayCount{
+	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), api.HTTPSourceRelayCount{
 		AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9", // pragma: allowlist secret
 		Day:          ts.today,
 		Success:      5,
 		Error:        5,
 	}))
 
-	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), HttpSourceRelayCount{
+	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), api.HTTPSourceRelayCount{
 		AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8", // pragma: allowlist secret
 		Day:          ts.from,
 		Success:      3,
 		Error:        3,
 	}))
-	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), HttpSourceRelayCount{
+	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), api.HTTPSourceRelayCount{
 		AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9", // pragma: allowlist secret
 		Day:          ts.from,
 		Success:      3,
 		Error:        3,
 	}))
 
-	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), HttpSourceRelayCount{
+	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), api.HTTPSourceRelayCount{
 		AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8", // pragma: allowlist secret
 		Day:          ts.to,
 		Success:      4,
 		Error:        4,
 	}))
-	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), HttpSourceRelayCount{
+	ts.NoError(ts.driver.WriteHTTPSourceRelayCount(context.Background(), api.HTTPSourceRelayCount{
 		AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9", // pragma: allowlist secret
 		Day:          ts.to,
 		Success:      4,

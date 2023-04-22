@@ -3,13 +3,15 @@ package postgresdriver
 import (
 	"context"
 	"time"
+
+	"github.com/pokt-foundation/relay-meter/api"
 )
 
 func truncateToDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, &time.Location{})
 }
 
-func (d *PostgresDriver) WriteHTTPSourceRelayCount(ctx context.Context, count HttpSourceRelayCount) error {
+func (d *PostgresDriver) WriteHTTPSourceRelayCount(ctx context.Context, count api.HTTPSourceRelayCount) error {
 	return d.InsertHTTPSourceRelayCount(ctx, InsertHTTPSourceRelayCountParams{
 		AppPublicKey: count.AppPublicKey,
 		Day:          truncateToDay(count.Day),
@@ -18,7 +20,7 @@ func (d *PostgresDriver) WriteHTTPSourceRelayCount(ctx context.Context, count Ht
 	})
 }
 
-func (d *PostgresDriver) WriteHTTPSourceRelayCounts(ctx context.Context, counts []HttpSourceRelayCount) error {
+func (d *PostgresDriver) WriteHTTPSourceRelayCounts(ctx context.Context, counts []api.HTTPSourceRelayCount) error {
 	var (
 		appPublicKeys []string
 		days          []time.Time
@@ -41,7 +43,7 @@ func (d *PostgresDriver) WriteHTTPSourceRelayCounts(ctx context.Context, counts 
 	})
 }
 
-func (d *PostgresDriver) ReadHTTPSourceRelayCounts(ctx context.Context, from, to time.Time) ([]HttpSourceRelayCount, error) {
+func (d *PostgresDriver) ReadHTTPSourceRelayCounts(ctx context.Context, from, to time.Time) ([]api.HTTPSourceRelayCount, error) {
 	dbCounts, err := d.SelectHTTPSourceRelayCounts(ctx, SelectHTTPSourceRelayCountsParams{
 		Day:   truncateToDay(from),
 		Day_2: truncateToDay(to),
@@ -50,10 +52,10 @@ func (d *PostgresDriver) ReadHTTPSourceRelayCounts(ctx context.Context, from, to
 		return nil, err
 	}
 
-	var counts []HttpSourceRelayCount
+	var counts []api.HTTPSourceRelayCount
 
 	for _, dbCount := range dbCounts {
-		counts = append(counts, HttpSourceRelayCount{
+		counts = append(counts, api.HTTPSourceRelayCount{
 			AppPublicKey: dbCount.AppPublicKey,
 			Day:          dbCount.Day,
 			Success:      dbCount.Success,

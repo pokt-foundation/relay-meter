@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,10 +19,22 @@ import (
 func TestGetHttpServer(t *testing.T) {
 	now, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 
+	rawInputToSend := []HTTPSourceRelayCountInput{
+		{
+			AppPublicKey: "21",
+			Success:      21,
+			Error:        7,
+		},
+	}
+
+	inputToSend, _ := json.Marshal(rawInputToSend)
+
 	testCases := []struct {
 		name               string
 		url                string
+		method             string
 		expected           string
+		reqInput           []byte
 		expectedStatusCode int
 		failAuth           bool
 	}{
@@ -31,6 +44,7 @@ func TestGetHttpServer(t *testing.T) {
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
+			method:             http.MethodGet,
 			expectedStatusCode: http.StatusOK,
 		},
 		{
@@ -39,6 +53,7 @@ func TestGetHttpServer(t *testing.T) {
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
+			method:             http.MethodGet,
 			expectedStatusCode: http.StatusOK,
 		},
 		{
@@ -47,6 +62,7 @@ func TestGetHttpServer(t *testing.T) {
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
+			method:             http.MethodGet,
 			expectedStatusCode: http.StatusOK,
 		},
 		{
@@ -55,6 +71,7 @@ func TestGetHttpServer(t *testing.T) {
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
+			method:             http.MethodGet,
 			expectedStatusCode: http.StatusOK,
 		},
 		{
@@ -63,11 +80,13 @@ func TestGetHttpServer(t *testing.T) {
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
+			method:             http.MethodGet,
 			expectedStatusCode: http.StatusOK,
 		},
 		{
 			name:               "Invalid request path returns an error",
 			url:                "http://relay-meter.pokt.network/invalid-path",
+			method:             http.MethodGet,
 			expectedStatusCode: http.StatusBadRequest,
 		},
 		{
@@ -76,6 +95,14 @@ func TestGetHttpServer(t *testing.T) {
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
+			method:             http.MethodGet,
+			expectedStatusCode: http.StatusOK,
+		},
+		{
+			name:               "Upload relay counts is handled correctly",
+			url:                "http://relay-meter.pokt.network/v1/relays/counts",
+			method:             http.MethodPost,
+			reqInput:           inputToSend,
 			expectedStatusCode: http.StatusOK,
 		},
 		{
@@ -84,6 +111,7 @@ func TestGetHttpServer(t *testing.T) {
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
+			method:             http.MethodGet,
 			failAuth:           true,
 			expectedStatusCode: http.StatusUnauthorized,
 		},
@@ -93,7 +121,7 @@ func TestGetHttpServer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			httpServer := GetHttpServer(context.Background(), &fakeRelayMeter{}, logger.New(), map[string]bool{"dummy": true})
 
-			req := httptest.NewRequest("GET", tc.url, nil)
+			req := httptest.NewRequest(tc.method, tc.url, bytes.NewBuffer(tc.reqInput))
 			if !tc.failAuth {
 				req.Header.Add("Authorization", "dummy")
 			}
@@ -108,10 +136,12 @@ func TestGetHttpServer(t *testing.T) {
 			}
 
 			if !tc.failAuth {
-				body, _ := io.ReadAll(resp.Body)
-				var r AppRelaysResponse
-				if err := json.Unmarshal(body, &r); err != nil {
-					t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
+				if tc.method == http.MethodGet {
+					body, _ := io.ReadAll(resp.Body)
+					var r AppRelaysResponse
+					if err := json.Unmarshal(body, &r); err != nil {
+						t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
+					}
 				}
 			}
 		})
@@ -576,6 +606,10 @@ func (f *fakeRelayMeter) AllAppsLatencies(ctx context.Context) ([]AppLatencyResp
 func (f *fakeRelayMeter) AppLatency(ctx context.Context, app string) (AppLatencyResponse, error) {
 	f.requestedApp = app
 	return f.latencyResponse, f.responseErr
+}
+
+func (f *fakeRelayMeter) WriteHTTPSourceRelayCounts(ctx context.Context, counts []HTTPSourceRelayCount) error {
+	return nil
 }
 
 func TestTimePeriod(t *testing.T) {

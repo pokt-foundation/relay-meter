@@ -90,7 +90,7 @@ func TestUserRelays(t *testing.T) {
 				},
 			}
 
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			got, err := relayMeter.UserRelays(context.Background(), tc.user, tc.from, tc.to)
 			if err != nil {
@@ -165,7 +165,7 @@ func TestTotalRelays(t *testing.T) {
 				todaysUsage: todaysUsage,
 			}
 
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			got, err := relayMeter.TotalRelays(context.Background(), tc.from, tc.to)
 			if err != nil {
@@ -345,7 +345,7 @@ func TestAppRelays(t *testing.T) {
 				todaysUsage: todaysUsage,
 			}
 
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			got, err := relayMeter.AppRelays(context.Background(), requestedApp, tc.from, tc.to)
 			if err != nil {
@@ -705,7 +705,7 @@ func TestAllAppsRelays(t *testing.T) {
 				todaysUsage: todaysUsage,
 			}
 
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			rawGot, err := relayMeter.AllAppsRelays(context.Background(), tc.from, tc.to)
 			if err != nil {
@@ -775,7 +775,7 @@ func TestAppLatency(t *testing.T) {
 				err:           tc.backendErr,
 			}
 
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			got, err := relayMeter.AppLatency(context.Background(), tc.requestedApp)
 			if err != nil {
@@ -859,7 +859,7 @@ func TestAllAppsLatencies(t *testing.T) {
 				err:           tc.backendErr,
 			}
 
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			rawGot, err := relayMeter.AllAppsLatencies(context.Background())
 
@@ -987,7 +987,7 @@ func TestLoadBalancerRelays(t *testing.T) {
 				err: tc.backendErr,
 			}
 
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			got, err := relayMeter.LoadBalancerRelays(context.Background(), tc.loadbalancer, tc.from, tc.to)
 			if err != nil && !errors.Is(err, tc.expectedErr) {
@@ -1133,7 +1133,7 @@ func TestAllLoadBalancersRelays(t *testing.T) {
 				err: tc.backendErr,
 			}
 
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			rawGot, err := relayMeter.AllLoadBalancersRelays(context.Background(), tc.from, tc.to)
 			if err != nil && !errors.Is(err, tc.expectedErr) {
@@ -1334,7 +1334,7 @@ func TestAllRelaysOrigin(t *testing.T) {
 				todaysOriginUsage: todaysUsage,
 			}
 
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
+			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
 			rawGot, err := relayMeter.AllRelaysOrigin(context.Background(), tc.from, tc.to)
 			if err != nil {
@@ -1456,4 +1456,10 @@ func fakeTodaysLatency() map[string][]Latency {
 		"app2": latencyMetrics,
 		"app4": latencyMetrics,
 	}
+}
+
+type fakeDriver struct{}
+
+func (d *fakeDriver) WriteHTTPSourceRelayCounts(ctx context.Context, counts []HTTPSourceRelayCount) error {
+	return nil
 }

@@ -31,6 +31,7 @@ var (
 	specificOriginUsagePath = regexp.MustCompile(`^/v1/relays/origin-classification/([[:alnum:]_].*)`)
 	appsLatencyPath         = regexp.MustCompile(`^/v1/latency/apps/([[:alnum:]_]+)$`)
 	allAppsLatencyPath      = regexp.MustCompile(`^/v1/latency/apps`)
+	relayCountsPath         = regexp.MustCompile(`^/v1/relays/counts`)
 )
 
 // TODO: move these custom error codes to the api package
@@ -113,6 +114,40 @@ func handleAllAppsLatency(ctx context.Context, meter RelayMeter, l *logger.Logge
 		return meter.AllAppsLatencies(ctx)
 	}
 	handleEndpoint(ctx, l, meterEndpoint, w, req)
+}
+
+func handleUploadRelayCounts(ctx context.Context, meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+	decoder := json.NewDecoder(req.Body)
+
+	var inCounts []HTTPSourceRelayCountInput
+	err := decoder.Decode(&inCounts)
+	if err != nil {
+		l.WithFields(logger.Fields{"error": err}).Warn("Invalid input")
+		http.Error(w, fmt.Sprintf("Invalid input: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// just permit to add new counters to today
+	now := time.Now()
+	var counts []HTTPSourceRelayCount
+	for _, incount := range inCounts {
+		counts = append(counts, HTTPSourceRelayCount{
+			AppPublicKey: incount.AppPublicKey,
+			Day:          now,
+			Success:      incount.Success,
+			Error:        incount.Error,
+		})
+	}
+
+	err = meter.WriteHTTPSourceRelayCounts(ctx, counts)
+	if err != nil {
+		l.WithFields(logger.Fields{"error": err}).Warn("Error on DB")
+		http.Error(w, fmt.Sprintf("Error on DB: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "counters added")
 }
 
 func handleEndpoint(ctx context.Context, l *logger.Logger, meterEndpoint func(from, to time.Time) (any, error), w http.ResponseWriter, req *http.Request) {
@@ -216,59 +251,63 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 			return
 		}
 
-		if req.Method != http.MethodGet {
-			log.Warn("Incorrect request method, expected: " + http.MethodGet)
-			http.Error(w, fmt.Sprintf("Incorrect request method, expected: %s, got: %s", http.MethodPost, req.Method), http.StatusBadRequest)
+		if req.Method == http.MethodGet {
+			if appID := match(appsRelaysPath, req.URL.Path); appID != "" {
+				handleAppRelays(ctx, meter, l, appID, w, req)
+				return
+			}
+
+			if userID := match(usersRelaysPath, req.URL.Path); userID != "" {
+				handleUserRelays(ctx, meter, l, userID, w, req)
+				return
+			}
+
+			if lbID := match(lbRelaysPath, req.URL.Path); lbID != "" {
+				handleLoadBalancerRelays(ctx, meter, l, lbID, w, req)
+				return
+			}
+
+			if appID := match(appsLatencyPath, req.URL.Path); appID != "" {
+				handleAppLatency(ctx, meter, l, appID, w, req)
+				return
+			}
+
+			if allAppsRelaysPath.Match([]byte(req.URL.Path)) {
+				handleAllAppsRelays(ctx, meter, l, w, req)
+				return
+			}
+
+			if allLbsRelaysPath.Match([]byte(req.URL.Path)) {
+				handleAllLoadBalancersRelays(ctx, meter, l, w, req)
+				return
+			}
+
+			if origin := match(specificOriginUsagePath, req.URL.Path); origin != "" {
+				handleSpecificOriginClassification(ctx, meter, l, origin, w, req)
+				return
+			}
+
+			if originUsagePath.Match([]byte(req.URL.Path)) {
+				handleOriginClassification(ctx, meter, l, w, req)
+				return
+			}
+
+			if totalRelaysPath.Match([]byte(req.URL.Path)) {
+				handleTotalRelays(ctx, meter, l, w, req)
+				return
+			}
+
+			if allAppsLatencyPath.Match([]byte(req.URL.Path)) {
+				handleAllAppsLatency(ctx, meter, l, w, req)
+				return
+			}
 		}
 
-		if appID := match(appsRelaysPath, req.URL.Path); appID != "" {
-			handleAppRelays(ctx, meter, l, appID, w, req)
-			return
-		}
-
-		if userID := match(usersRelaysPath, req.URL.Path); userID != "" {
-			handleUserRelays(ctx, meter, l, userID, w, req)
-			return
-		}
-
-		if lbID := match(lbRelaysPath, req.URL.Path); lbID != "" {
-			handleLoadBalancerRelays(ctx, meter, l, lbID, w, req)
-			return
-		}
-
-		if appID := match(appsLatencyPath, req.URL.Path); appID != "" {
-			handleAppLatency(ctx, meter, l, appID, w, req)
-			return
-		}
-
-		if allAppsRelaysPath.Match([]byte(req.URL.Path)) {
-			handleAllAppsRelays(ctx, meter, l, w, req)
-			return
-		}
-
-		if allLbsRelaysPath.Match([]byte(req.URL.Path)) {
-			handleAllLoadBalancersRelays(ctx, meter, l, w, req)
-			return
-		}
-
-		if origin := match(specificOriginUsagePath, req.URL.Path); origin != "" {
-			handleSpecificOriginClassification(ctx, meter, l, origin, w, req)
-			return
-		}
-
-		if originUsagePath.Match([]byte(req.URL.Path)) {
-			handleOriginClassification(ctx, meter, l, w, req)
-			return
-		}
-
-		if totalRelaysPath.Match([]byte(req.URL.Path)) {
-			handleTotalRelays(ctx, meter, l, w, req)
-			return
-		}
-
-		if allAppsLatencyPath.Match([]byte(req.URL.Path)) {
-			handleAllAppsLatency(ctx, meter, l, w, req)
-			return
+		if req.Method == http.MethodPost {
+			if relayCountsPath.Match([]byte(req.URL.Path)) {
+				handleUploadRelayCounts(ctx, meter, l, w, req)
+				return
+			}
 		}
 
 		log.Warn("Invalid request endpoint")

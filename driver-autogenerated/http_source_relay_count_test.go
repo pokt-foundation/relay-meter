@@ -3,26 +3,28 @@ package postgresdriver
 import (
 	"context"
 	"time"
+
+	"github.com/pokt-foundation/relay-meter/api"
 )
 
 func (ts *PGDriverTestSuite) TestPostgresDriver_HTTPSourceRelayCount() {
 	tests := []struct {
 		name   string
-		count  HttpSourceRelayCount
-		counts []HttpSourceRelayCount
+		count  api.HTTPSourceRelayCount
+		counts []api.HTTPSourceRelayCount
 		times  int64
 		day    time.Time
 		err    error
 	}{
 		{
 			name: "Success",
-			count: HttpSourceRelayCount{
+			count: api.HTTPSourceRelayCount{
 				AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8", // pragma: allowlist secret
 				Day:          time.Date(1999, time.July, 21, 0, 0, 0, 0, &time.Location{}),
 				Success:      3,
 				Error:        3,
 			},
-			counts: []HttpSourceRelayCount{
+			counts: []api.HTTPSourceRelayCount{
 				{
 					AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9", // pragma: allowlist secret
 					Day:          time.Date(1999, time.July, 22, 0, 0, 0, 0, &time.Location{}),
@@ -61,7 +63,7 @@ func (ts *PGDriverTestSuite) TestPostgresDriver_HTTPSourceRelayCount() {
 		ts.Equal(err, tt.err)
 
 		// need to convert to map to be able to assert the results
-		countsMap := make(map[string]HttpSourceRelayCount, len(counts))
+		countsMap := make(map[string]api.HTTPSourceRelayCount, len(counts))
 		for _, count := range counts {
 			countsMap[count.AppPublicKey] = count
 		}
