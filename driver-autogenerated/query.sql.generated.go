@@ -8,6 +8,8 @@ package postgresdriver
 import (
 	"context"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const insertHTTPSourceRelayCount = `-- name: InsertHTTPSourceRelayCount :exec
@@ -31,6 +33,35 @@ func (q *Queries) InsertHTTPSourceRelayCount(ctx context.Context, arg InsertHTTP
 		arg.Day,
 		arg.Success,
 		arg.Error,
+	)
+	return err
+}
+
+const insertHTTPSourceRelayCounts = `-- name: InsertHTTPSourceRelayCounts :exec
+INSERT INTO http_source_relay_count (app_public_key, day, success, error)
+SELECT
+    unnest($1::char(64)[]) AS app_public_key,
+    unnest($2::date[]) AS day,
+    unnest($3::bigint[]) AS success,
+    unnest($4::bigint[]) AS error
+ON CONFLICT (app_public_key, day) DO UPDATE
+    SET success = http_source_relay_count.success + excluded.success,
+        error = http_source_relay_count.error + excluded.error
+`
+
+type InsertHTTPSourceRelayCountsParams struct {
+	Column1 []string    `json:"column1"`
+	Column2 []time.Time `json:"column2"`
+	Column3 []int64     `json:"column3"`
+	Column4 []int64     `json:"column4"`
+}
+
+func (q *Queries) InsertHTTPSourceRelayCounts(ctx context.Context, arg InsertHTTPSourceRelayCountsParams) error {
+	_, err := q.db.ExecContext(ctx, insertHTTPSourceRelayCounts,
+		pq.Array(arg.Column1),
+		pq.Array(arg.Column2),
+		pq.Array(arg.Column3),
+		pq.Array(arg.Column4),
 	)
 	return err
 }

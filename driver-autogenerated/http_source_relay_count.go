@@ -18,6 +18,29 @@ func (d *PostgresDriver) WriteHTTPSourceRelayCount(ctx context.Context, count Ht
 	})
 }
 
+func (d *PostgresDriver) WriteHTTPSourceRelayCounts(ctx context.Context, counts []HttpSourceRelayCount) error {
+	var (
+		appPublicKeys []string
+		days          []time.Time
+		successes     []int64
+		errors        []int64
+	)
+
+	for _, count := range counts {
+		appPublicKeys = append(appPublicKeys, count.AppPublicKey)
+		days = append(days, truncateToDay(count.Day))
+		successes = append(successes, count.Success)
+		errors = append(errors, count.Error)
+	}
+
+	return d.InsertHTTPSourceRelayCounts(ctx, InsertHTTPSourceRelayCountsParams{
+		Column1: appPublicKeys,
+		Column2: days,
+		Column3: successes,
+		Column4: errors,
+	})
+}
+
 func (d *PostgresDriver) ReadHTTPSourceRelayCounts(ctx context.Context, from, to time.Time) ([]HttpSourceRelayCount, error) {
 	dbCounts, err := d.SelectHTTPSourceRelayCounts(ctx, SelectHTTPSourceRelayCountsParams{
 		Day:   truncateToDay(from),
