@@ -128,3 +128,18 @@ func (ts *PGDriverTestSuite) TestPostgresDriver_TodaysLatency() {
 		}
 	}
 }
+
+func (ts *PGDriverTestSuite) TestPostgresDriver_Name() {
+	tests := []struct {
+		name     string
+		expected string
+	}{
+		{
+			name:     "Success",
+			expected: "http",
+		},
+	}
+	for _, tt := range tests {
+		ts.Equal(ts.driver.Name(), tt.expected)
+	}
+}

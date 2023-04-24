@@ -75,3 +75,7 @@ func (d *PostgresDriver) TodaysCountsPerOrigin() (map[string]api.RelayCounts, er
 func (d *PostgresDriver) TodaysLatency() (map[string][]api.Latency, error) {
 	return map[string][]api.Latency{}, nil
 }
+
+func (d *PostgresDriver) Name() string {
+	return "http"
+}

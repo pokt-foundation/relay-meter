@@ -22,6 +22,7 @@ type Source interface {
 	TodaysCounts() (map[string]api.RelayCounts, error)
 	TodaysCountsPerOrigin() (map[string]api.RelayCounts, error)
 	TodaysLatency() (map[string][]api.Latency, error)
+	Name() string
 }
 
 type Writer interface {
@@ -96,7 +97,7 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 		if err != nil {
 			return err
 		}
-		c.Logger.WithFields(logger.Fields{"daily_metrics_count": len(sourceCounts), "from": from, "to": to}).Info("Collected daily metrics")
+		c.Logger.WithFields(logger.Fields{"daily_metrics_count": len(sourceCounts), "from": from, "to": to, "source": source.Name()}).Info("Collected daily metrics")
 		sourcesCounts = append(sourcesCounts, sourceCounts)
 	}
 
@@ -107,29 +108,30 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 }
 
 func (c *collector) collectTodaysUsage() error {
-	var todaysCounts, todaysRelaysInOrigin map[string]api.RelayCounts
-	var todaysLatency map[string][]api.Latency
+	todaysCounts := make(map[string]api.RelayCounts)
+	todaysRelaysInOrigin := make(map[string]api.RelayCounts)
+	todaysLatency := make(map[string][]api.Latency)
 
 	for _, source := range c.Sources {
 		sourceTodaysCounts, err := source.TodaysCounts()
 		if err != nil {
 			c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily counts")
 		}
-		c.Logger.WithFields(logger.Fields{"todays_usage_count": len(sourceTodaysCounts)}).Info("Collected todays usage")
+		c.Logger.WithFields(logger.Fields{"todays_usage_count": len(sourceTodaysCounts), "source": source.Name()}).Info("Collected todays usage")
 		maps.Copy(todaysCounts, sourceTodaysCounts)
 
 		sourceTodaysRelaysInOrigin, err := source.TodaysCountsPerOrigin()
 		if err != nil {
 			return err
 		}
-		c.Logger.WithFields(logger.Fields{"todays_metrics_count_per_origin": len(sourceTodaysRelaysInOrigin)}).Info("Collected todays metrics")
+		c.Logger.WithFields(logger.Fields{"todays_metrics_count_per_origin": len(sourceTodaysRelaysInOrigin), "source": source.Name()}).Info("Collected todays metrics")
 		maps.Copy(todaysRelaysInOrigin, sourceTodaysRelaysInOrigin)
 
 		sourceTodaysLatency, err := source.TodaysLatency()
 		if err != nil {
 			c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily latencies")
 		}
-		c.Logger.WithFields(logger.Fields{"todays_latencies_count": len(sourceTodaysLatency)}).Info("Collected todays latencies")
+		c.Logger.WithFields(logger.Fields{"todays_latencies_count": len(sourceTodaysLatency), "source": source.Name()}).Info("Collected todays latencies")
 		maps.Copy(todaysLatency, sourceTodaysLatency)
 	}
 

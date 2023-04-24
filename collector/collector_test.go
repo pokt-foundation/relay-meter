@@ -296,6 +296,10 @@ func (f *fakeSource) TodaysLatency() (map[string][]api.Latency, error) {
 	return f.todaysLatency, nil
 }
 
+func (f *fakeSource) Name() string {
+	return "fake"
+}
+
 type fakeWriter struct {
 	first               time.Time
 	last                time.Time
