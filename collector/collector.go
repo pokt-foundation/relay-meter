@@ -7,7 +7,6 @@ import (
 	"time"
 
 	logger "github.com/sirupsen/logrus"
-	"golang.org/x/exp/maps"
 
 	"github.com/pokt-foundation/relay-meter/api"
 )
@@ -66,19 +65,6 @@ type collector struct {
 	*logger.Logger
 }
 
-func mergeRelayCountsMaps(dayMaps []map[time.Time]map[string]api.RelayCounts) map[time.Time]map[string]api.RelayCounts {
-	mergedMap := make(map[time.Time]map[string]api.RelayCounts)
-	for _, dayMap := range dayMaps {
-		for day, appMap := range dayMap {
-			if _, ok := mergedMap[day]; !ok {
-				mergedMap[day] = make(map[string]api.RelayCounts)
-			}
-			maps.Copy(mergedMap[day], appMap)
-		}
-	}
-	return mergedMap
-}
-
 // Collects relay usage data from the source and uses the writer to store.
 //
 //	-
@@ -101,16 +87,15 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 		sourcesCounts = append(sourcesCounts, sourceCounts)
 	}
 
-	counts := mergeRelayCountsMaps(sourcesCounts)
+	counts := mergeTimeRelayCountsMaps(sourcesCounts)
 
 	// TODO: Add counts per origins
 	return c.Writer.WriteDailyUsage(counts, nil)
 }
 
 func (c *collector) collectTodaysUsage() error {
-	todaysCounts := make(map[string]api.RelayCounts)
-	todaysRelaysInOrigin := make(map[string]api.RelayCounts)
-	todaysLatency := make(map[string][]api.Latency)
+	var sourcesTodaysCounts, sourcesTodaysRelaysInOrigin []map[string]api.RelayCounts
+	var sourcesTodaysLatency []map[string][]api.Latency
 
 	for _, source := range c.Sources {
 		sourceTodaysCounts, err := source.TodaysCounts()
@@ -118,22 +103,26 @@ func (c *collector) collectTodaysUsage() error {
 			c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily counts")
 		}
 		c.Logger.WithFields(logger.Fields{"todays_usage_count": len(sourceTodaysCounts), "source": source.Name()}).Info("Collected todays usage")
-		maps.Copy(todaysCounts, sourceTodaysCounts)
+		sourcesTodaysCounts = append(sourcesTodaysCounts, sourceTodaysCounts)
 
 		sourceTodaysRelaysInOrigin, err := source.TodaysCountsPerOrigin()
 		if err != nil {
 			return err
 		}
 		c.Logger.WithFields(logger.Fields{"todays_metrics_count_per_origin": len(sourceTodaysRelaysInOrigin), "source": source.Name()}).Info("Collected todays metrics")
-		maps.Copy(todaysRelaysInOrigin, sourceTodaysRelaysInOrigin)
+		sourcesTodaysRelaysInOrigin = append(sourcesTodaysRelaysInOrigin, sourceTodaysRelaysInOrigin)
 
 		sourceTodaysLatency, err := source.TodaysLatency()
 		if err != nil {
 			c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily latencies")
 		}
 		c.Logger.WithFields(logger.Fields{"todays_latencies_count": len(sourceTodaysLatency), "source": source.Name()}).Info("Collected todays latencies")
-		maps.Copy(todaysLatency, sourceTodaysLatency)
+		sourcesTodaysLatency = append(sourcesTodaysLatency, sourceTodaysLatency)
 	}
+
+	todaysCounts := mergeRelayCountsMaps(sourcesTodaysCounts)
+	todaysRelaysInOrigin := mergeRelayCountsMaps(sourcesTodaysRelaysInOrigin)
+	todaysLatency := mergeLatencyMaps(sourcesTodaysLatency)
 
 	return c.Writer.WriteTodaysMetrics(todaysCounts, todaysRelaysInOrigin, todaysLatency)
 }
