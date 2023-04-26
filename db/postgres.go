@@ -69,6 +69,10 @@ func NewPostgresClient(options PostgresOptions) (PostgresClient, error) {
 	return &pgClient{DB: db}, nil
 }
 
+func NewPostgresClientFromDBInstance(db *sql.DB) PostgresClient {
+	return &pgClient{DB: db}
+}
+
 // type pgReporter
 type pgClient struct {
 	*sql.DB

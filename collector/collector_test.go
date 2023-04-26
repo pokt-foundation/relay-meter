@@ -59,13 +59,15 @@ func TestCollect(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			source := &fakeSource{}
+			source1 := &fakeSource{}
+			source2 := &fakeSource{}
+			sources := []*fakeSource{source1, source2}
 			writer := &fakeWriter{
 				first: tc.firstSaved,
 				last:  tc.lastSaved,
 			}
 			c := &collector{
-				Source:        source,
+				Sources:       []Source{sources[0], sources[1]},
 				Writer:        writer,
 				MaxArchiveAge: tc.maxArchiveAge,
 				Logger:        logger.New(),
@@ -74,11 +76,22 @@ func TestCollect(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			if !source.todaysMetricsCollected {
-				t.Errorf("Expected todays metrics to be collected.")
-			}
-			if !source.todaysLatencyCollected {
-				t.Errorf("Expected todays latencies to be collected.")
+			for _, source := range sources {
+				if !source.todaysMetricsCollected {
+					t.Errorf("Expected todays metrics to be collected.")
+				}
+				if !source.todaysLatencyCollected {
+					t.Errorf("Expected todays latencies to be collected.")
+				}
+				if source.dailyMetricsCollected != tc.shouldCollectDaily {
+					t.Fatalf("Expected daily metrics collection to be: %t, got: %t", tc.shouldCollectDaily, source.dailyMetricsCollected)
+				}
+				if !source.requestedFrom.Equal(tc.expectedFrom) {
+					t.Errorf("Expected 'from': %v, got: %v", tc.expectedFrom, source.requestedFrom)
+				}
+				if !source.requestedTo.Equal(tc.expectedTo) {
+					t.Errorf("Expected 'to': %v, got: %v", tc.expectedTo, source.requestedTo)
+				}
 			}
 
 			if writer.todaysWrites != 1 {
@@ -89,20 +102,8 @@ func TestCollect(t *testing.T) {
 				t.Fatalf("Expected 1 write of todays latency metrics, got: %d", writer.todaysLatencyWrites)
 			}
 
-			if source.dailyMetricsCollected != tc.shouldCollectDaily {
-				t.Fatalf("Expected daily metrics collection to be: %t, got: %t", tc.shouldCollectDaily, source.dailyMetricsCollected)
-			}
-
 			if !tc.shouldCollectDaily {
 				return
-			}
-
-			if !source.requestedFrom.Equal(tc.expectedFrom) {
-				t.Errorf("Expected 'from': %v, got: %v", tc.expectedFrom, source.requestedFrom)
-			}
-
-			if !source.requestedTo.Equal(tc.expectedTo) {
-				t.Errorf("Expected 'to': %v, got: %v", tc.expectedTo, source.requestedTo)
 			}
 		})
 	}
@@ -128,7 +129,7 @@ func TestStart(t *testing.T) {
 			source := &fakeSource{}
 			writer := &fakeWriter{}
 			c := &collector{
-				Source:        source,
+				Sources:       []Source{source},
 				Writer:        writer,
 				MaxArchiveAge: 30 * 24 * time.Hour,
 				Logger:        logger.New(),
@@ -183,6 +184,10 @@ func (f *fakeSource) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error)
 func (f *fakeSource) TodaysLatency() (map[string][]api.Latency, error) {
 	f.todaysLatencyCollected = true
 	return f.todaysLatency, nil
+}
+
+func (f *fakeSource) Name() string {
+	return "fake"
 }
 
 type fakeWriter struct {

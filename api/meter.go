@@ -42,6 +42,8 @@ type RelayMeter interface {
 	AllAppsLatencies(ctx context.Context) ([]AppLatencyResponse, error)
 	AllRelaysOrigin(ctx context.Context, from, to time.Time) ([]OriginClassificationsResponse, error)
 	RelaysOrigin(ctx context.Context, origin string, from, to time.Time) (OriginClassificationsResponse, error)
+
+	WriteHTTPSourceRelayCounts(ctx context.Context, counts []HTTPSourceRelayCount) error
 }
 
 type RelayCounts struct {
@@ -105,6 +107,19 @@ type RelayMeterOptions struct {
 	MaxPastDays      time.Duration
 }
 
+type HTTPSourceRelayCount struct {
+	AppPublicKey string    `json:"appPublicKey"`
+	Day          time.Time `json:"day"`
+	Success      int64     `json:"success"`
+	Error        int64     `json:"error"`
+}
+
+type HTTPSourceRelayCountInput struct {
+	AppPublicKey string `json:"appPublicKey"`
+	Success      int64  `json:"success"`
+	Error        int64  `json:"error"`
+}
+
 type Backend interface {
 	// TODO: reverse map keys order, i.e. map[app]-> map[day]RelayCounts, at PG level
 	DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error)
@@ -119,10 +134,15 @@ type Backend interface {
 	LoadBalancers(ctx context.Context) ([]*types.LoadBalancer, error)
 }
 
-func NewRelayMeter(ctx context.Context, backend Backend, logger *logger.Logger, options RelayMeterOptions) RelayMeter {
+type Driver interface {
+	WriteHTTPSourceRelayCounts(ctx context.Context, counts []HTTPSourceRelayCount) error
+}
+
+func NewRelayMeter(ctx context.Context, backend Backend, driver Driver, logger *logger.Logger, options RelayMeterOptions) RelayMeter {
 	// PG client
 	meter := &relayMeter{
 		Backend:           backend,
+		Driver:            driver,
 		Logger:            logger,
 		RelayMeterOptions: options,
 	}
@@ -135,6 +155,7 @@ func NewRelayMeter(ctx context.Context, backend Backend, logger *logger.Logger, 
 // TODO: Add Cache
 type relayMeter struct {
 	Backend
+	Driver
 	*logger.Logger
 
 	dailyUsage        map[time.Time]map[string]RelayCounts

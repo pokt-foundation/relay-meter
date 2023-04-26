@@ -23,6 +23,7 @@ type Source interface {
 	// Returns relay counts for today grouped by origin
 	TodaysCountsPerOrigin() (map[string]api.RelayCounts, error)
 	TodaysLatency() (map[string][]api.Latency, error)
+	Name() string
 }
 
 type InfluxDBOptions struct {
@@ -45,6 +46,10 @@ func NewInfluxDBSource(options InfluxDBOptions) Source {
 
 type influxDB struct {
 	Options InfluxDBOptions
+}
+
+func (*influxDB) Name() string {
+	return "influx"
 }
 
 // DailyCounts Returns total of number of daily relays per application, up to and including the specified day
