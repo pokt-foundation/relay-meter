@@ -89,8 +89,27 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 
 	counts := mergeTimeRelayCountsMaps(sourcesCounts)
 
+	allZeroCountsDates := []time.Time{}
+	for date, relayCountsMap := range counts {
+		allZero := true
+		for _, relayCounts := range relayCountsMap {
+			if relayCounts.Success != 0 || relayCounts.Failure != 0 {
+				allZero = false
+				break
+			}
+		}
+		if allZero {
+			allZeroCountsDates = append(allZeroCountsDates, date)
+		}
+	}
+
+	// Print dates where all counts are zero:
+	for _, date := range allZeroCountsDates {
+		fmt.Println(date)
+	}
 	// TODO: Add counts per origins
-	return c.Writer.WriteDailyUsage(counts, nil)
+	// return c.Writer.WriteDailyUsage(counts, nil)
+	return nil
 }
 
 func (c *collector) collectTodaysUsage() error {
@@ -142,17 +161,17 @@ func (c *collector) collect() error {
 	// We assume there are no gaps between stored metrics from start to end, so
 	// 	start collecting metrics after the last saved date
 	dayLayout := "2006-01-02"
-	today, err := time.Parse(dayLayout, time.Now().Format(dayLayout))
+	today, err := time.Parse(dayLayout, time.Now().UTC().Format(dayLayout))
 	if err != nil {
 		return err
 	}
-	if last.Equal(today.AddDate(0, 0, -1)) || last.After(today.AddDate(0, 0, -1)) {
-		c.Logger.WithFields(logger.Fields{"today": today, "last_daily_collected": last}).Info("Last collected daily metric was yesterday, skipping daily metrics collection...")
-		return nil
-	}
+	// if last.Equal(today.AddDate(0, 0, -1)) || last.After(today.AddDate(0, 0, -1)) {
+	// 	c.Logger.WithFields(logger.Fields{"today": today, "last_daily_collected": last}).Info("Last collected daily metric was yesterday, skipping daily metrics collection...")
+	// 	return nil
+	// }
 	var from time.Time
 	if first.Equal(time.Time{}) {
-		from = time.Now().Add(-1 * c.MaxArchiveAge)
+		from = time.Now().UTC().Add(-1 * c.MaxArchiveAge)
 	} else {
 		from = last.AddDate(0, 0, 1)
 		if from.After(today) {
@@ -161,7 +180,7 @@ func (c *collector) collect() error {
 	}
 
 	// TODO: cover with unit tests
-	return c.CollectDailyUsage(from, time.Now().AddDate(0, 0, -1))
+	return c.CollectDailyUsage(from, time.Now().UTC().AddDate(0, 0, -1))
 }
 
 func (c *collector) Start(ctx context.Context, collectIntervalSeconds, reportIntervalSeconds int) {

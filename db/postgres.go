@@ -151,32 +151,32 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 }
 
 func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
-	ctx := context.Background()
-	// TODO: determine required isolation level
-	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return err
-	}
+	// ctx := context.Background()
+	// // TODO: determine required isolation level
+	// tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	// if err != nil {
+	// 	return err
+	// }
 
-	// TODO: bulk insert
-	for day, appCounts := range counts {
-		for app, counts := range appCounts {
-			_, execErr := tx.ExecContext(ctx,
-				"INSERT INTO daily_app_sums(application, count_success, count_failure, time) VALUES($1, $2, $3, $4);",
-				app, counts.Success, counts.Failure, day)
-			if execErr != nil {
-				if rollbackErr := tx.Rollback(); rollbackErr != nil {
-					fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
-					return execErr
-				}
-				fmt.Printf("update failed: %v", execErr)
-			}
-		}
-	}
+	// // TODO: bulk insert
+	// for day, appCounts := range counts {
+	// 	for app, counts := range appCounts {
+	// 		_, execErr := tx.ExecContext(ctx,
+	// 			"INSERT INTO daily_app_sums(application, count_success, count_failure, time) VALUES($1, $2, $3, $4);",
+	// 			app, counts.Success, counts.Failure, day)
+	// 		if execErr != nil {
+	// 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+	// 				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+	// 				return execErr
+	// 			}
+	// 			fmt.Printf("update failed: %v", execErr)
+	// 		}
+	// 	}
+	// }
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
+	// if err := tx.Commit(); err != nil {
+	// 	return err
+	// }
 	return nil
 }
 
@@ -203,26 +203,26 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 }
 
 func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
-	ctx := context.Background()
-	// TODO: determine required isolation level
-	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return err
-	}
+	// ctx := context.Background()
+	// // TODO: determine required isolation level
+	// tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	// if err != nil {
+	// 	return err
+	// }
 
-	err = p.writeTodaysLatency(ctx, tx, latencies)
-	if err != nil {
-		return fmt.Errorf("error writing latency: %s", err.Error())
-	}
+	// err = p.writeTodaysLatency(ctx, tx, latencies)
+	// if err != nil {
+	// 	return fmt.Errorf("error writing latency: %s", err.Error())
+	// }
 
-	err = p.WriteTodaysUsage(ctx, tx, counts, countsOrigin)
-	if err != nil {
-		return fmt.Errorf("error writing usage: %s", err.Error())
-	}
+	// err = p.WriteTodaysUsage(ctx, tx, counts, countsOrigin)
+	// if err != nil {
+	// 	return fmt.Errorf("error writing usage: %s", err.Error())
+	// }
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
+	// if err := tx.Commit(); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
@@ -231,67 +231,67 @@ func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsO
 //
 //	All the entries in the table holding todays metrics are deleted first.
 func (p *pgClient) WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
-	if err := WriteAppUsage(ctx, tx, counts); err != nil {
-		return err
-	}
+	// if err := WriteAppUsage(ctx, tx, counts); err != nil {
+	// 	return err
+	// }
 
-	if err := WriteOriginUsage(ctx, tx, countsOrigin); err != nil {
-		return err
-	}
+	// if err := WriteOriginUsage(ctx, tx, countsOrigin); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
 
 func WriteAppUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts) error {
-	// todays_sums table gets rebuilt every time
-	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_app_sums")
-	if deleteErr != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr)
-			return deleteErr
-		}
-	}
+	// // todays_sums table gets rebuilt every time
+	// _, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_app_sums")
+	// if deleteErr != nil {
+	// 	if rollbackErr := tx.Rollback(); rollbackErr != nil {
+	// 		fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr)
+	// 		return deleteErr
+	// 	}
+	// }
 
-	// TODO: bulk insert
-	for app, count := range counts {
-		_, execErr := tx.ExecContext(ctx,
-			"INSERT INTO todays_app_sums(application, count_success, count_failure) VALUES($1, $2, $3);",
-			app, count.Success, count.Failure)
-		if execErr != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
-				return execErr
-			}
-			fmt.Printf("update failed: %v", execErr)
-		}
-	}
+	// // TODO: bulk insert
+	// for app, count := range counts {
+	// 	_, execErr := tx.ExecContext(ctx,
+	// 		"INSERT INTO todays_app_sums(application, count_success, count_failure) VALUES($1, $2, $3);",
+	// 		app, count.Success, count.Failure)
+	// 	if execErr != nil {
+	// 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+	// 			fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+	// 			return execErr
+	// 		}
+	// 		fmt.Printf("update failed: %v", execErr)
+	// 	}
+	// }
 
 	return nil
 }
 
 func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts) error {
-	// todays_sums table gets rebuilt every time
-	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_relay_counts")
-	if deleteErr != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr)
-			return deleteErr
-		}
-	}
+	// // todays_sums table gets rebuilt every time
+	// _, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_relay_counts")
+	// if deleteErr != nil {
+	// 	if rollbackErr := tx.Rollback(); rollbackErr != nil {
+	// 		fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr)
+	// 		return deleteErr
+	// 	}
+	// }
 
-	// TODO: bulk insert
-	for origin, count := range counts {
-		_, execErr := tx.ExecContext(ctx,
-			"INSERT INTO todays_relay_counts(origin, count_success, count_failure) VALUES($1, $2, $3);",
-			origin, count.Success, count.Failure)
-		if execErr != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
-				return execErr
-			}
-			fmt.Printf("update failed: %v", execErr)
-		}
-	}
+	// // TODO: bulk insert
+	// for origin, count := range counts {
+	// 	_, execErr := tx.ExecContext(ctx,
+	// 		"INSERT INTO todays_relay_counts(origin, count_success, count_failure) VALUES($1, $2, $3);",
+	// 		origin, count.Success, count.Failure)
+	// 	if execErr != nil {
+	// 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+	// 			fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+	// 			return execErr
+	// 		}
+	// 		fmt.Printf("update failed: %v", execErr)
+	// 	}
+	// }
 
 	return nil
 }
