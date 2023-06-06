@@ -169,7 +169,7 @@ func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCoun
 					fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
 					return execErr
 				}
-				fmt.Printf("update failed: %v", execErr)
+				fmt.Printf("update failed err write dailyUsage: %v", execErr.Error())
 			}
 		}
 	}
@@ -262,7 +262,7 @@ func WriteAppUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayC
 				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
 				return execErr
 			}
-			fmt.Printf("update failed: %v", execErr)
+			fmt.Printf("update failed err writeAppUsage: %v", execErr.Error())
 		}
 	}
 
@@ -289,7 +289,7 @@ func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.Rel
 				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
 				return execErr
 			}
-			fmt.Printf("update failed: %v", execErr)
+			fmt.Printf("update failed err write origin usage: %v", execErr.Error())
 		}
 	}
 
@@ -321,7 +321,7 @@ func (p *pgClient) writeTodaysLatency(ctx context.Context, tx *sql.Tx, latencies
 					fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
 					return execErr
 				}
-				fmt.Printf("update failed: %v", execErr)
+				fmt.Printf("update failed err write today latency: %v", execErr.Error())
 			}
 		}
 	}
