@@ -4,7 +4,7 @@ services:
   # Relay Meter Containers
   relay-meter-collector:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile.production.collector
     container_name: relay-meter-collector
     restart: always
@@ -34,7 +34,7 @@ services:
 
   relay-meter-apiserver:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile.production.apiserver
     container_name: relay-meter-apiserver
     restart: always
@@ -94,7 +94,7 @@ services:
     environment:
       POSTGRES_PASSWORD: pgpassword
     volumes:
-      - ./testdata/schema.test.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./schema.test.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: pg_isready -U postgres -p 5434
       interval: 5s
@@ -112,7 +112,11 @@ services:
     ports:
       - "8090:8090"
     environment:
-      CONNECTION_STRING: postgres://postgres:pgpassword@portal-db:5432/postgres?sslmode=disable # pragma: allowlist secret
+      PG_USER: postgres
+      PG_PASSWORD: pgpassword
+      PG_HOST: portal-db
+      PG_PORT: 5432
+      PG_DATABASE: postgres
       API_KEYS: test_api_key_6789
       PORT: 8090
     depends_on:
@@ -124,11 +128,11 @@ services:
       retries: 3
 
   portal-db:
-    image: pocketfoundation/test-portal-postgres:latest
+    image: pocketfoundation/test-portal-postgres:1.10.8
     container_name: portal-db
     restart: always
-    expose:
-      - 5432
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_PASSWORD: pgpassword
       POSTGRES_DB: postgres

@@ -166,7 +166,7 @@ func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCoun
 				app, counts.Success, counts.Failure, day)
 			if execErr != nil {
 				if rollbackErr := tx.Rollback(); rollbackErr != nil {
-					fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+					fmt.Printf("update failed err write dailyUsage: %v, unable to rollback: %v\n", execErr, rollbackErr.Error())
 					return execErr
 				}
 				fmt.Printf("update failed err write dailyUsage: %v", execErr.Error())
@@ -247,7 +247,7 @@ func WriteAppUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayC
 	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_app_sums")
 	if deleteErr != nil {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
-			fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr)
+			fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr.Error())
 			return deleteErr
 		}
 	}
@@ -259,7 +259,7 @@ func WriteAppUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayC
 			app, count.Success, count.Failure)
 		if execErr != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+				fmt.Printf("update failed err writeAppUsage: %v, unable to rollback: %v\n", execErr, rollbackErr.Error())
 				return execErr
 			}
 			fmt.Printf("update failed err writeAppUsage: %v", execErr.Error())
@@ -286,7 +286,7 @@ func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.Rel
 			origin, count.Success, count.Failure)
 		if execErr != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+				fmt.Printf("update failed err write origin usage: %v, unable to rollback: %v\n", execErr, rollbackErr.Error())
 				return execErr
 			}
 			fmt.Printf("update failed err write origin usage: %v", execErr.Error())
@@ -318,7 +318,7 @@ func (p *pgClient) writeTodaysLatency(ctx context.Context, tx *sql.Tx, latencies
 
 			if execErr != nil {
 				if rollbackErr := tx.Rollback(); rollbackErr != nil {
-					fmt.Printf("update failed: %v, unable to rollback: %v\n", execErr, rollbackErr)
+					fmt.Printf("update failed err write today latency: %v, unable to rollback: %v\n", execErr, rollbackErr.Error())
 					return execErr
 				}
 				fmt.Printf("update failed err write today latency: %v", execErr.Error())
