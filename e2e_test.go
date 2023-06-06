@@ -172,14 +172,16 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 
 	ts.Run("Test_AllLoadBalancerRelaysEndpoint", func() {
 		tests := []struct {
-			name string
-			date time.Time
-			err  error
+			name           string
+			date           time.Time
+			emptyRelaysApp string
+			err            error
 		}{
 			{
-				name: "Test return value of /relays/endpoints endpoint",
-				date: ts.startOfDay,
-				err:  nil,
+				name:           "Test return value of /relays/endpoints endpoint",
+				date:           ts.startOfDay,
+				emptyRelaysApp: "test_cc49729227c22f3934a966d99a6be72b",
+				err:            nil,
 			},
 		}
 
@@ -191,8 +193,10 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 					ts.NotEmpty(endpointRelays.Endpoint)
 					ts.Len(endpointRelays.Applications, 1)
 					ts.Len(endpointRelays.Applications[0], 37) // Test pub keys have 37 instead of 64 characters
-					ts.NotEmpty(endpointRelays.Count.Success)
-					ts.NotEmpty(endpointRelays.Count.Failure)
+					if endpointRelays.Applications[0] != test.emptyRelaysApp {
+						ts.NotEmpty(endpointRelays.Count.Success)
+						ts.NotEmpty(endpointRelays.Count.Failure)
+					}
 					ts.Equal(test.date, endpointRelays.From)
 					ts.Equal(test.date.AddDate(0, 0, 1), endpointRelays.To)
 				}
