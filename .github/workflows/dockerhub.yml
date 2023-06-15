@@ -45,10 +45,24 @@ jobs:
           registry: "${{ env.REGISTRY }}"
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            pocketfoundation/relay-meter-collector
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
  
-      - name: Get tag
-        id: get-tag
-        run: echo ::set-output name=short_ref::${GITHUB_REF#refs/*/}
 
       - name: Build, Tag and Push Collector to Dockerhub
         uses: docker/build-push-action@v3
@@ -57,7 +71,7 @@ jobs:
           file: Dockerfile.production.collector
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-             ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.COLLECTOR_REPO }}/${{ env.COLLECTOR_IMAGE }}:${{ steps.get-tag.outputs.short_ref }}
+             ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.COLLECTOR_REPO }}/${{ env.COLLECTOR_IMAGE }}:${{ steps.meta.outputs.tags }}
              ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.COLLECTOR_REPO }}/${{ env.COLLECTOR_IMAGE }}:latest
   
   docker-apiserver:
@@ -83,9 +97,22 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      - name: Get tag
-        id: get-tag
-        run: echo ::set-output name=short_ref::${GITHUB_REF#refs/*/}
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            pocketfoundation/relay-meter-collector
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
 
       - name: Build, Tag and Push to Dockerhub
         uses: docker/build-push-action@v3
@@ -94,5 +121,5 @@ jobs:
           file: Dockerfile.production.apiserver
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVER_REPO }}/${{ env.SERVER_IMAGE }}:${{ steps.get-tag.outputs.short_ref }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVER_REPO }}/${{ env.SERVER_IMAGE }}:${{ steps.meta.outputs.tags }}
             ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVER_REPO }}/${{ env.SERVER_IMAGE }}:latest
