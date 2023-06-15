@@ -71,7 +71,6 @@ jobs:
           file: Dockerfile.production.collector
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-             ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.COLLECTOR_REPO }}/${{ env.COLLECTOR_IMAGE }}:${{ steps.meta.outputs.tags }}
              ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.COLLECTOR_REPO }}/${{ env.COLLECTOR_IMAGE }}:latest
   
   docker-apiserver:
@@ -121,5 +120,4 @@ jobs:
           file: Dockerfile.production.apiserver
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVER_REPO }}/${{ env.SERVER_IMAGE }}:${{ steps.meta.outputs.tags }}
             ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVER_REPO }}/${{ env.SERVER_IMAGE }}:latest
