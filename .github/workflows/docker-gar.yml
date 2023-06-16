@@ -1,4 +1,4 @@
-name: lint, test and push to Google Artifact Registry
+name: Lint, Test and Push to Google Artifact Registry
 
 on:
   push:
@@ -93,6 +93,7 @@ jobs:
             ['@semantic-release/commit-analyzer']
 
   push-docker-collector:
+    name: Push Collector Docker Image to GAR
     if: needs.tag.outputs.new == 'true'
     runs-on: ubuntu-latest
     needs: [test, tag]
@@ -107,7 +108,7 @@ jobs:
         name: "Authenticate to Google Cloud"
         uses: "google-github-actions/auth@v0.6.0"
         with:
-          credentials_json: "${{ secrets.GCP_CREDENTIALS }}"
+          credentials_json: "${{ secrets.COLLECTOR_GCP_CREDENTIALS }}"
           token_format: "access_token"
 
       - name: Login to Google Artifact Registry
@@ -129,6 +130,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.COLLECTOR_REPO }}/${{ env.COLLECTOR_IMAGE }}:latest
 
   push-docker-apiserver:
+    name: Push API Server Docker Image to GAR
     if: needs.tag.outputs.new == 'true'
     runs-on: ubuntu-latest
     needs: [test, tag]
@@ -143,7 +145,7 @@ jobs:
         id: "auth"
         uses: "google-github-actions/auth@v0.6.0"
         with:
-          credentials_json: "${{ secrets.GCP_CREDENTIALS }}"
+          credentials_json: "${{ secrets.SERVER_GCP_CREDENTIALS }}"
           token_format: "access_token"
 
       - name: Login to Google Artifact Registry
