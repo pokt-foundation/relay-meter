@@ -1,13 +1,10 @@
 name: lint, test and push to Google Artifact Registry
 
 on:
-  pull_request:
-    branches:
-    - main
-
   push:
     branches:
       - main
+      - staging
 
 env:
   PROJECT_ID: portal-gb-prod
