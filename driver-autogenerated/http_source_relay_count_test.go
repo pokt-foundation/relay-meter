@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
 )
 
@@ -19,23 +20,23 @@ func (ts *PGDriverTestSuite) TestPostgresDriver_HTTPSourceRelayCount() {
 		{
 			name: "Success",
 			count: api.HTTPSourceRelayCount{
-				AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8", // pragma: allowlist secret
-				Day:          time.Date(1999, time.July, 21, 0, 0, 0, 0, &time.Location{}),
-				Success:      3,
-				Error:        3,
+				PortalAppID: "test_956d67d3ea93cbfe18a",
+				Day:         time.Date(1999, time.July, 21, 0, 0, 0, 0, &time.Location{}),
+				Success:     3,
+				Error:       3,
 			},
 			counts: []api.HTTPSourceRelayCount{
 				{
-					AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9", // pragma: allowlist secret
-					Day:          time.Date(1999, time.July, 22, 0, 0, 0, 0, &time.Location{}),
-					Success:      3,
-					Error:        3,
+					PortalAppID: "test_6b2faf2e3b061651297",
+					Day:         time.Date(1999, time.July, 22, 0, 0, 0, 0, &time.Location{}),
+					Success:     3,
+					Error:       3,
 				},
 				{
-					AppPublicKey: "2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a1", // pragma: allowlist secret
-					Day:          time.Date(1999, time.July, 22, 0, 0, 0, 0, &time.Location{}),
-					Success:      3,
-					Error:        3,
+					PortalAppID: "test_d609ae9e66fbcb266f9",
+					Day:         time.Date(1999, time.July, 22, 0, 0, 0, 0, &time.Location{}),
+					Success:     3,
+					Error:       3,
 				},
 			},
 			times: 2,
@@ -55,7 +56,7 @@ func (ts *PGDriverTestSuite) TestPostgresDriver_HTTPSourceRelayCount() {
 		counts, err := ts.driver.ReadHTTPSourceRelayCounts(context.Background(), tt.count.Day, tt.count.Day)
 		ts.Equal(err, tt.err)
 
-		ts.Equal(counts[0].AppPublicKey, tt.count.AppPublicKey)
+		ts.Equal(counts[0].PortalAppID, tt.count.PortalAppID)
 		ts.Equal(counts[0].Success, tt.count.Success*tt.times)
 		ts.Equal(counts[0].Error, tt.count.Error*tt.times)
 
@@ -63,15 +64,15 @@ func (ts *PGDriverTestSuite) TestPostgresDriver_HTTPSourceRelayCount() {
 		ts.Equal(err, tt.err)
 
 		// need to convert to map to be able to assert the results
-		countsMap := make(map[string]api.HTTPSourceRelayCount, len(counts))
+		countsMap := make(map[types.PortalAppID]api.HTTPSourceRelayCount, len(counts))
 		for _, count := range counts {
-			countsMap[count.AppPublicKey] = count
+			countsMap[count.PortalAppID] = count
 		}
 
 		for _, count := range tt.counts {
-			ts.Equal(countsMap[count.AppPublicKey].AppPublicKey, count.AppPublicKey)
-			ts.Equal(countsMap[count.AppPublicKey].Success, count.Success*tt.times)
-			ts.Equal(countsMap[count.AppPublicKey].Error, count.Error*tt.times)
+			ts.Equal(countsMap[count.PortalAppID].PortalAppID, count.PortalAppID)
+			ts.Equal(countsMap[count.PortalAppID].Success, count.Success*tt.times)
+			ts.Equal(countsMap[count.PortalAppID].Error, count.Error*tt.times)
 		}
 	}
 }

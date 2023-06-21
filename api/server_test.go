@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/pokt-foundation/portal-db/v2/types"
 	logger "github.com/sirupsen/logrus"
 )
 
@@ -21,9 +22,9 @@ func TestGetHttpServer(t *testing.T) {
 
 	rawInputToSend := []HTTPSourceRelayCountInput{
 		{
-			AppPublicKey: "21",
-			Success:      21,
-			Error:        7,
+			PortalAppID: "21",
+			Success:     21,
+			Error:       7,
 		},
 	}
 
@@ -39,26 +40,14 @@ func TestGetHttpServer(t *testing.T) {
 		failAuth           bool
 	}{
 		{
-			name: "App relays path is handled correctly",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/apps/app?from=%s&to=%s",
-				url.QueryEscape(now.Format(time.RFC3339)),
-				url.QueryEscape(now.Format(time.RFC3339)),
-			),
+			name:               "Healthcheck",
+			url:                "http://relay-meter.pokt.network/",
 			method:             http.MethodGet,
 			expectedStatusCode: http.StatusOK,
 		},
 		{
 			name: "User relays path is handled correctly",
 			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/users/user?from=%s&to=%s",
-				url.QueryEscape(now.Format(time.RFC3339)),
-				url.QueryEscape(now.Format(time.RFC3339)),
-			),
-			method:             http.MethodGet,
-			expectedStatusCode: http.StatusOK,
-		},
-		{
-			name: "All apps relays path is handled correctly",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/apps?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -75,8 +64,8 @@ func TestGetHttpServer(t *testing.T) {
 			expectedStatusCode: http.StatusOK,
 		},
 		{
-			name: "All load balancers relays path is handled correctly",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/endpoints?from=%s&to=%s",
+			name: "All portal apps relays path is handled correctly",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/portal_apps?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -107,7 +96,7 @@ func TestGetHttpServer(t *testing.T) {
 		},
 		{
 			name: "Failed auhtorization",
-			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/endpoints?from=%s&to=%s",
+			url: fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/portal_apps?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			),
@@ -136,9 +125,9 @@ func TestGetHttpServer(t *testing.T) {
 			}
 
 			if !tc.failAuth {
-				if tc.method == http.MethodGet {
+				if tc.method == http.MethodGet && req.URL.Path != "/" {
 					body, _ := io.ReadAll(resp.Body)
-					var r AppRelaysResponse
+					var r PortalAppRelaysResponse
 					if err := json.Unmarshal(body, &r); err != nil {
 						t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
 					}
@@ -149,236 +138,45 @@ func TestGetHttpServer(t *testing.T) {
 
 }
 
-func TestHandleAppRelays(t *testing.T) {
+func TestHandlePortalAppRelays(t *testing.T) {
 	now, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 
 	testCases := []struct {
 		name               string
-		meterResponse      AppRelaysResponse
+		meterResponse      PortalAppRelaysResponse
 		meterErr           error
 		expectedStatusCode int
 	}{
 		{
 			name: "Correct number of relays is returned",
-			meterResponse: AppRelaysResponse{
+			meterResponse: PortalAppRelaysResponse{
 				Count:       RelayCounts{Success: 5, Failure: 3},
 				From:        now,
 				To:          now,
-				Application: "app",
+				PortalAppID: "portal_app_1",
 			},
 			expectedStatusCode: http.StatusOK,
 		},
 		{
 			name: "Error from the meter returns an internal error response",
-			meterResponse: AppRelaysResponse{
+			meterResponse: PortalAppRelaysResponse{
 				Count:       RelayCounts{},
 				From:        now,
 				To:          now,
-				Application: "internal meter error",
+				PortalAppID: "internal meter error",
 			},
 			meterErr:           fmt.Errorf("Internal meter error"),
 			expectedStatusCode: http.StatusInternalServerError,
 		},
 		{
-			name: "Application not found returns a not found response",
-			meterResponse: AppRelaysResponse{
+			name: "PortalApp not found returns a not found response",
+			meterResponse: PortalAppRelaysResponse{
 				Count:       RelayCounts{},
 				From:        now,
 				To:          now,
-				Application: "non-existent-app",
+				PortalAppID: "non-existent-load-balancer",
 			},
-			meterErr:           AppNotFound,
-			expectedStatusCode: http.StatusBadRequest,
-		},
-		{
-			name: "Bad request returns reqest error response",
-			meterResponse: AppRelaysResponse{
-				Count:       RelayCounts{},
-				From:        now,
-				To:          now,
-				Application: "app",
-			},
-			meterErr:           InvalidRequest,
-			expectedStatusCode: http.StatusBadRequest,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			fakeMeter := fakeRelayMeter{
-				response:    tc.meterResponse,
-				responseErr: tc.meterErr,
-			}
-
-			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/apps/app?from=%s&to=%s",
-				url.QueryEscape(now.Format(time.RFC3339)),
-				url.QueryEscape(now.Format(time.RFC3339)),
-			)
-			req := httptest.NewRequest("GET", url, nil)
-			w := httptest.NewRecorder()
-
-			handleAppRelays(context.Background(), &fakeMeter, logger.New(), "app", w, req)
-
-			if !fakeMeter.requestedFrom.Equal(now) {
-				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
-			}
-
-			resp := w.Result()
-			body, _ := io.ReadAll(resp.Body)
-
-			if resp.StatusCode != tc.expectedStatusCode {
-				t.Errorf("Expected status code: %d, got: %d", tc.expectedStatusCode, resp.StatusCode)
-			}
-
-			// TODO: Should we return json even if there is a request/internal server error?
-			if tc.expectedStatusCode != http.StatusOK {
-				return
-			}
-
-			if resp.Header.Get("Content-Type") != "application/json" {
-				t.Errorf("Expected Content-Type: %s, got: %s", "application/json", resp.Header.Get("Content-Type"))
-			}
-
-			var r AppRelaysResponse
-			if err := json.Unmarshal(body, &r); err != nil {
-				t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
-			}
-			if r.Count != tc.meterResponse.Count {
-				t.Errorf("Expected Count: %d, got: %d", tc.meterResponse.Count, r.Count)
-			}
-		})
-	}
-}
-
-func TestHandleAllAppsRelays(t *testing.T) {
-	now, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-
-	testCases := []struct {
-		name               string
-		meterResponse      []AppRelaysResponse
-		meterErr           error
-		expectedStatusCode int
-	}{
-		{
-			name: "Correct number of relays is returned",
-			meterResponse: []AppRelaysResponse{
-				{
-					Application: "app1",
-					From:        now.AddDate(0, 0, -30),
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 62,
-						Failure: 58,
-					},
-				},
-			},
-			expectedStatusCode: http.StatusOK,
-		},
-		{
-			name:               "Error from the meter returns an internal error response",
-			meterErr:           fmt.Errorf("Internal meter error"),
-			expectedStatusCode: http.StatusInternalServerError,
-		},
-		{
-			name:               "Application not found returns a not found response",
-			meterErr:           AppNotFound,
-			expectedStatusCode: http.StatusBadRequest,
-		},
-		{
-			name:               "Bad request returns reqest error response",
-			meterErr:           InvalidRequest,
-			expectedStatusCode: http.StatusBadRequest,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			fakeMeter := fakeRelayMeter{
-				allResponse: tc.meterResponse,
-				responseErr: tc.meterErr,
-			}
-
-			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/apps?from=%s&to=%s",
-				url.QueryEscape(now.Format(time.RFC3339)),
-				url.QueryEscape(now.Format(time.RFC3339)),
-			)
-			req := httptest.NewRequest("GET", url, nil)
-			w := httptest.NewRecorder()
-
-			handleAllAppsRelays(context.Background(), &fakeMeter, logger.New(), w, req)
-
-			if !fakeMeter.requestedFrom.Equal(now) {
-				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
-			}
-
-			resp := w.Result()
-			body, _ := io.ReadAll(resp.Body)
-
-			if resp.StatusCode != tc.expectedStatusCode {
-				t.Errorf("Expected status code: %d, got: %d", tc.expectedStatusCode, resp.StatusCode)
-			}
-
-			// TODO: Should we return json even if there is a request/internal server error?
-			if tc.expectedStatusCode != http.StatusOK {
-				return
-			}
-
-			if resp.Header.Get("Content-Type") != "application/json" {
-				t.Errorf("Expected Content-Type: %s, got: %s", "application/json", resp.Header.Get("Content-Type"))
-			}
-
-			var r []AppRelaysResponse
-			if err := json.Unmarshal(body, &r); err != nil {
-				t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
-			}
-
-			if diff := cmp.Diff(tc.meterResponse, r); diff != "" {
-				t.Errorf("unexpected value (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestHandleLoadBalancerRelays(t *testing.T) {
-	now, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-
-	testCases := []struct {
-		name               string
-		meterResponse      LoadBalancerRelaysResponse
-		meterErr           error
-		expectedStatusCode int
-	}{
-		{
-			name: "Correct number of relays is returned",
-			meterResponse: LoadBalancerRelaysResponse{
-				Count:        RelayCounts{Success: 5, Failure: 3},
-				From:         now,
-				To:           now,
-				Endpoint:     "lb1",
-				Applications: []string{"app1", "app2"},
-			},
-			expectedStatusCode: http.StatusOK,
-		},
-		{
-			name: "Error from the meter returns an internal error response",
-			meterResponse: LoadBalancerRelaysResponse{
-				Count:    RelayCounts{},
-				From:     now,
-				To:       now,
-				Endpoint: "internal meter error",
-			},
-			meterErr:           fmt.Errorf("Internal meter error"),
-			expectedStatusCode: http.StatusInternalServerError,
-		},
-		{
-			name: "LoadBalancer not found returns a not found response",
-			meterResponse: LoadBalancerRelaysResponse{
-				Count:    RelayCounts{},
-				From:     now,
-				To:       now,
-				Endpoint: "non-existent-load-balancer",
-			},
-			meterErr:           ErrLoadBalancerNotFound,
+			meterErr:           ErrPortalAppNotFound,
 			expectedStatusCode: http.StatusNotFound,
 		},
 		{
@@ -391,18 +189,18 @@ func TestHandleLoadBalancerRelays(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeMeter := fakeRelayMeter{
-				loadbalancerRelaysResponse: tc.meterResponse,
-				responseErr:                tc.meterErr,
+				portalAppRelaysResponse: tc.meterResponse,
+				responseErr:             tc.meterErr,
 			}
 
-			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/endpoints/lb1?from=%s&to=%s",
+			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/portal_apps/portal_app_1?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			)
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleLoadBalancerRelays(context.Background(), &fakeMeter, logger.New(), "lb1", w, req)
+			handlePortalAppRelays(context.Background(), &fakeMeter, logger.New(), "portal_app_1", w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
@@ -424,7 +222,7 @@ func TestHandleLoadBalancerRelays(t *testing.T) {
 				t.Errorf("Expected Content-Type: %s, got: %s", "application/json", resp.Header.Get("Content-Type"))
 			}
 
-			var r LoadBalancerRelaysResponse
+			var r PortalAppRelaysResponse
 			if err := json.Unmarshal(body, &r); err != nil {
 				t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
 			}
@@ -435,52 +233,51 @@ func TestHandleLoadBalancerRelays(t *testing.T) {
 	}
 }
 
-func TestHandleAllLoadBalancersRelays(t *testing.T) {
+func TestHandleAllPortalAppsRelays(t *testing.T) {
 	now, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 
 	testCases := []struct {
 		name               string
-		meterResponse      []LoadBalancerRelaysResponse
+		meterResponse      []PortalAppRelaysResponse
 		meterErr           error
 		expectedStatusCode int
 	}{
 		{
 			name: "Correct number of relays is returned",
-			meterResponse: []LoadBalancerRelaysResponse{
+			meterResponse: []PortalAppRelaysResponse{
 				{
-					Count:        RelayCounts{Success: 5, Failure: 3},
-					From:         now,
-					To:           now,
-					Endpoint:     "lb1",
-					Applications: []string{"app1", "app2"},
+					Count:       RelayCounts{Success: 5, Failure: 3},
+					From:        now,
+					To:          now,
+					PortalAppID: "portal_app_1",
 				},
 			},
 			expectedStatusCode: http.StatusOK,
 		},
 		{
 			name: "Error from the meter returns an internal error response",
-			meterResponse: []LoadBalancerRelaysResponse{
+			meterResponse: []PortalAppRelaysResponse{
 				{
-					Count:    RelayCounts{},
-					From:     now,
-					To:       now,
-					Endpoint: "internal meter error",
+					Count:       RelayCounts{},
+					From:        now,
+					To:          now,
+					PortalAppID: "internal meter error",
 				},
 			},
 			meterErr:           fmt.Errorf("Internal meter error"),
 			expectedStatusCode: http.StatusInternalServerError,
 		},
 		{
-			name: "LoadBalancer not found returns a not found response",
-			meterResponse: []LoadBalancerRelaysResponse{
+			name: "PortalApp not found returns a not found response",
+			meterResponse: []PortalAppRelaysResponse{
 				{
-					Count:    RelayCounts{},
-					From:     now,
-					To:       now,
-					Endpoint: "non-existent-load-balancer",
+					Count:       RelayCounts{},
+					From:        now,
+					To:          now,
+					PortalAppID: "non-existent-load-balancer",
 				},
 			},
-			meterErr:           ErrLoadBalancerNotFound,
+			meterErr:           ErrPortalAppNotFound,
 			expectedStatusCode: http.StatusNotFound,
 		},
 		{
@@ -493,18 +290,18 @@ func TestHandleAllLoadBalancersRelays(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeMeter := fakeRelayMeter{
-				allLoadBalancersResponse: tc.meterResponse,
-				responseErr:              tc.meterErr,
+				allPortalAppsResponse: tc.meterResponse,
+				responseErr:           tc.meterErr,
 			}
 
-			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/endpoints/lb1?from=%s&to=%s",
+			url := fmt.Sprintf("http://relay-meter.pokt.network/v1/relays/portal_apps/portal_app_1?from=%s&to=%s",
 				url.QueryEscape(now.Format(time.RFC3339)),
 				url.QueryEscape(now.Format(time.RFC3339)),
 			)
 			req := httptest.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
 
-			handleAllLoadBalancersRelays(context.Background(), &fakeMeter, logger.New(), w, req)
+			handleAllPortalAppsRelays(context.Background(), &fakeMeter, logger.New(), w, req)
 
 			if !fakeMeter.requestedFrom.Equal(now) {
 				t.Fatalf("Expected %v on 'from' parameter, got: %v", now, fakeMeter.requestedFrom)
@@ -526,7 +323,7 @@ func TestHandleAllLoadBalancersRelays(t *testing.T) {
 				t.Errorf("Expected Content-Type: %s, got: %s", "application/json", resp.Header.Get("Content-Type"))
 			}
 
-			var r []LoadBalancerRelaysResponse
+			var r []PortalAppRelaysResponse
 			if err := json.Unmarshal(body, &r); err != nil {
 				t.Fatalf("Unexpected error unmarhsalling the response: %v", err)
 			}
@@ -538,36 +335,21 @@ func TestHandleAllLoadBalancersRelays(t *testing.T) {
 }
 
 type fakeRelayMeter struct {
-	requestedFrom time.Time
-	requestedTo   time.Time
-	requestedApp  string
+	requestedFrom      time.Time
+	requestedTo        time.Time
+	requestedPortalApp types.PortalAppID
 
-	response                   AppRelaysResponse
-	allResponse                []AppRelaysResponse
-	loadbalancerRelaysResponse LoadBalancerRelaysResponse
-	allLoadBalancersResponse   []LoadBalancerRelaysResponse
+	response                   PortalAppRelaysResponse
+	allResponse                []PortalAppRelaysResponse
+	portalAppRelaysResponse    PortalAppRelaysResponse
+	allPortalAppsResponse      []PortalAppRelaysResponse
 	allClassificationsResponse []OriginClassificationsResponse
 	responseErr                error
 	latencyResponse            AppLatencyResponse
 	allLatencyResponse         []AppLatencyResponse
 }
 
-func (f *fakeRelayMeter) AppRelays(ctx context.Context, app string, from, to time.Time) (AppRelaysResponse, error) {
-	f.requestedFrom = from
-	f.requestedTo = to
-	f.requestedApp = app
-
-	return f.response, f.responseErr
-}
-
-func (f *fakeRelayMeter) AllAppsRelays(ctx context.Context, from, to time.Time) ([]AppRelaysResponse, error) {
-	f.requestedFrom = from
-	f.requestedTo = to
-
-	return f.allResponse, f.responseErr
-}
-
-func (f *fakeRelayMeter) UserRelays(ctx context.Context, user string, from, to time.Time) (UserRelaysResponse, error) {
+func (f *fakeRelayMeter) UserRelays(ctx context.Context, user types.UserID, from, to time.Time) (UserRelaysResponse, error) {
 	return UserRelaysResponse{}, nil
 }
 
@@ -575,16 +357,16 @@ func (f *fakeRelayMeter) TotalRelays(ctx context.Context, from, to time.Time) (T
 	return TotalRelaysResponse{}, nil
 }
 
-func (f *fakeRelayMeter) LoadBalancerRelays(ctx context.Context, endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error) {
+func (f *fakeRelayMeter) PortalAppRelays(ctx context.Context, portalAppID types.PortalAppID, from, to time.Time) (PortalAppRelaysResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
-	return f.loadbalancerRelaysResponse, f.responseErr
+	return f.portalAppRelaysResponse, f.responseErr
 }
 
-func (f *fakeRelayMeter) AllLoadBalancersRelays(ctx context.Context, from, to time.Time) ([]LoadBalancerRelaysResponse, error) {
+func (f *fakeRelayMeter) AllPortalAppsRelays(ctx context.Context, from, to time.Time) ([]PortalAppRelaysResponse, error) {
 	f.requestedFrom = from
 	f.requestedTo = to
-	return f.allLoadBalancersResponse, f.responseErr
+	return f.allPortalAppsResponse, f.responseErr
 }
 
 func (f *fakeRelayMeter) AllRelaysOrigin(ctx context.Context, from, to time.Time) ([]OriginClassificationsResponse, error) {
@@ -603,8 +385,8 @@ func (f *fakeRelayMeter) AllAppsLatencies(ctx context.Context) ([]AppLatencyResp
 	return f.allLatencyResponse, f.responseErr
 }
 
-func (f *fakeRelayMeter) AppLatency(ctx context.Context, app string) (AppLatencyResponse, error) {
-	f.requestedApp = app
+func (f *fakeRelayMeter) AppLatency(ctx context.Context, portalAppID types.PortalAppID) (AppLatencyResponse, error) {
+	f.requestedPortalApp = portalAppID
 	return f.latencyResponse, f.responseErr
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gojektech/heimdall/httpclient"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/relay-meter/db"
 	timeUtils "github.com/pokt-foundation/utils-go/time"
@@ -31,13 +32,13 @@ var testSuiteOptions = TestClientOptions{
 	},
 	mainBucket:        "mainnetRelay",
 	main1mBucket:      "mainnetRelayApp1m",
-	phdBaseURL:        "http://localhost:8090",
+	phdBaseURL:        "http://localhost:8080",
 	phdAPIKey:         "test_api_key_6789",
 	testUserID:        "test_user_1dbffbdfeeb225",
 	relayMeterBaseURL: "http://localhost:9898",
 }
 
-const testAPIKey = "test_api_key_1234"
+const testAPIKey = "test_api_key_1244"
 
 /* To run the E2E suite use the command `make test_e2e` from the repository root.
 The E2E suite also runs on all Pull Requests to the main or staging branches.
@@ -49,9 +50,9 @@ It follows the flow:
 - Populates InfluxDB with 100,000 relays with timestamps across a 24 hour period.
 - Influx DB tasks collect and populate time series buckets from the main bucket.
 - The Collector will collect these relays from Influx and save them to Postgres.
-- The API Server will serve this relay data from Postgres via REST endpoints.
+- The API Server will serve this relay data from Postgres via REST portal_apps.
 
-The test verifies this data by verifying it can be accessed from the API server's endpoints. */
+The test verifies this data by verifying it can be accessed from the API server's portal_apps. */
 
 // Sets up the suite (~1 minute due to need for Influx tasks and Collector to run) and runs all the tests.
 func Test_RunSuite_E2E(t *testing.T) {
@@ -88,59 +89,6 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 		}
 	})
 
-	ts.Run("Test_AllAppRelaysEndpoint", func() {
-		tests := []struct {
-			name string
-			date time.Time
-			err  error
-		}{
-			{
-				name: "Test return value of /relays/apps endpoint",
-				date: ts.startOfDay,
-				err:  nil,
-			},
-		}
-
-		for _, test := range tests {
-			allAppsRelays, err := get[[]api.AppRelaysResponse](ts.options.relayMeterBaseURL, "v1/relays/apps", "", ts.dateParams, testAPIKey, ts.httpClient)
-			ts.Equal(test.err, err)
-			for _, appRelays := range allAppsRelays {
-				ts.Len(appRelays.Application, 37) // Test pub keys have 37 instead of 64 characters
-				ts.NotEmpty(appRelays.Count.Success)
-				ts.NotEmpty(appRelays.Count.Failure)
-				ts.Equal(test.date, appRelays.From)
-				ts.Equal(test.date.AddDate(0, 0, 1), appRelays.To)
-			}
-		}
-	})
-
-	ts.Run("Test_AppRelaysEndpoint", func() {
-		tests := []struct {
-			name      string
-			date      time.Time
-			appPubKey string
-			err       error
-		}{
-			{
-				name:      "Test return value of /relays/apps/{APP_PUB_KEY} endpoint",
-				date:      ts.startOfDay,
-				appPubKey: ts.TestRelays[0].ApplicationPublicKey,
-				err:       nil,
-			},
-		}
-
-		for _, test := range tests {
-			appRelays, err := get[api.AppRelaysResponse](ts.options.relayMeterBaseURL, "v1/relays/apps", test.appPubKey, ts.dateParams, testAPIKey, ts.httpClient)
-			ts.Equal(test.err, err)
-			ts.Len(appRelays.Application, 37) // Test pub keys have 37 instead of 64 characters
-			ts.Equal(ts.TestRelays[0].ApplicationPublicKey, appRelays.Application)
-			ts.NotEmpty(appRelays.Count.Success)
-			ts.NotEmpty(appRelays.Count.Failure)
-			ts.Equal(test.date, appRelays.From)
-			ts.Equal(test.date.AddDate(0, 0, 1), appRelays.To)
-		}
-	})
-
 	ts.Run("Test_UserRelaysEndpoint", func() {
 		tests := []struct {
 			name   string
@@ -161,8 +109,8 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 			ts.Equal(test.err, err)
 			ts.Len(userRelays.User, 24)
 			ts.Equal(ts.options.testUserID, userRelays.User)
-			ts.Len(userRelays.Applications, 1)
-			ts.Len(userRelays.Applications[0], 37) // Test pub keys have 37 instead of 64 characters
+			ts.Len(userRelays.PortalAppIDs, 1)
+			ts.Len(userRelays.PortalAppIDs[0], 24)
 			ts.NotEmpty(userRelays.Count.Success)
 			ts.NotEmpty(userRelays.Count.Failure)
 			ts.Equal(test.date, userRelays.From)
@@ -178,7 +126,7 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 			err            error
 		}{
 			{
-				name:           "Test return value of /relays/endpoints endpoint",
+				name:           "Test return value of /relays/portal_apps endpoint",
 				date:           ts.startOfDay,
 				emptyRelaysApp: "test_cc49729227c22f3934a966d99a6be72b",
 				err:            nil,
@@ -186,24 +134,18 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 		}
 
 		for _, test := range tests {
-			allEndpointsRelays, err := get[[]api.LoadBalancerRelaysResponse](ts.options.relayMeterBaseURL, "v1/relays/endpoints", "", ts.dateParams, testAPIKey, ts.httpClient)
+			allEndpointsRelays, err := get[[]api.PortalAppRelaysResponse](ts.options.relayMeterBaseURL, "v1/relays/portal_apps", "", ts.dateParams, testAPIKey, ts.httpClient)
 			ts.Equal(test.err, err)
 			for _, endpointRelays := range allEndpointsRelays {
-				if endpointRelays.Applications != nil {
-					ts.NotEmpty(endpointRelays.Endpoint)
-					ts.Len(endpointRelays.Applications, 1)
-					ts.Len(endpointRelays.Applications[0], 37) // Test pub keys have 37 instead of 64 characters
-					if endpointRelays.Applications[0] != test.emptyRelaysApp {
-						ts.NotEmpty(endpointRelays.Count.Success)
-						ts.NotEmpty(endpointRelays.Count.Failure)
-					}
+				if endpointRelays.PortalAppID != "" {
+					ts.NotEmpty(endpointRelays.PortalAppID)
 					ts.Equal(test.date, endpointRelays.From)
 					ts.Equal(test.date.AddDate(0, 0, 1), endpointRelays.To)
 				}
 			}
 
 			// Must get created endpoint ID  for next test
-			ts.testLBID = allEndpointsRelays[0].Endpoint
+			ts.testPortalAppID = allEndpointsRelays[0].PortalAppID
 		}
 	})
 
@@ -214,18 +156,16 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 			err  error
 		}{
 			{
-				name: "Test return value of /relays/endpoints/{ENDPOINT_ID} endpoint",
+				name: "Test return value of /relays/portal_apps/{PORTAL_APP_ID} endpoint",
 				date: ts.startOfDay,
 				err:  nil,
 			},
 		}
 
 		for _, test := range tests {
-			endpointRelays, err := get[api.LoadBalancerRelaysResponse](ts.options.relayMeterBaseURL, "v1/relays/endpoints", ts.testLBID, ts.dateParams, testAPIKey, ts.httpClient)
+			endpointRelays, err := get[api.PortalAppRelaysResponse](ts.options.relayMeterBaseURL, "v1/relays/portal_apps", string(ts.testPortalAppID), ts.dateParams, testAPIKey, ts.httpClient)
 			ts.Equal(test.err, err)
-			ts.Len(endpointRelays.Endpoint, 23)
-			ts.Len(endpointRelays.Applications, 1)
-			ts.Len(endpointRelays.Applications[0], 37) // Test pub keys have 37 instead of 64 characters
+			ts.Len(endpointRelays.PortalAppID, 24)
 			ts.NotEmpty(endpointRelays.Count.Success)
 			ts.NotEmpty(endpointRelays.Count.Failure)
 			ts.Equal(test.date, endpointRelays.From)
@@ -295,14 +235,14 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 			err  error
 		}{
 			{
-				name: "Test return value of /latency/apps endpoint",
+				name: "Test return value of /latency/portal_apps endpoint",
 				date: ts.startOfDay,
 				err:  nil,
 			},
 		}
 
 		for _, test := range tests {
-			allAppLatencies, err := get[[]api.AppLatencyResponse](ts.options.relayMeterBaseURL, "v1/latency/apps", "", ts.dateParams, testAPIKey, ts.httpClient)
+			allAppLatencies, err := get[[]api.AppLatencyResponse](ts.options.relayMeterBaseURL, "v1/latency/portal_apps", "", ts.dateParams, testAPIKey, ts.httpClient)
 			ts.Equal(test.err, err)
 			for _, appLatency := range allAppLatencies {
 				ts.Len(appLatency.DailyLatency, 24)
@@ -315,9 +255,9 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 					}
 				}
 				ts.True(latencyExists)
-				ts.Equal(appLatency.From, time.Now().UTC().Add(-23*time.Hour).Truncate(time.Hour))
+				ts.Equal(appLatency.From, time.Now().UTC().Add(-24*time.Hour).Truncate(time.Hour))
 				ts.Equal(appLatency.To, time.Now().UTC().Truncate(time.Hour))
-				ts.Len(appLatency.Application, 37) // Test pub keys have 37 instead of 64 characters
+				ts.Len(appLatency.PortalAppID, 24)
 			}
 		}
 	})
@@ -330,15 +270,15 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 			err       error
 		}{
 			{
-				name:      "Test return value of /latency/apps/{APP_PUB_KEY} endpoint",
+				name:      "Test return value of /latency/portal_apps/{PORTAL_APP_ID} endpoint",
 				date:      ts.startOfDay,
-				appPubKey: ts.TestRelays[0].ApplicationPublicKey,
+				appPubKey: ts.TestRelays[0].PortalAppIDPublicKey,
 				err:       nil,
 			},
 		}
 
 		for _, test := range tests {
-			appLatency, err := get[api.AppLatencyResponse](ts.options.relayMeterBaseURL, "v1/latency/apps", test.appPubKey, ts.dateParams, testAPIKey, ts.httpClient)
+			appLatency, err := get[api.AppLatencyResponse](ts.options.relayMeterBaseURL, "v1/latency/portal_apps", test.appPubKey, ts.dateParams, testAPIKey, ts.httpClient)
 			ts.Equal(test.err, err)
 			ts.Len(appLatency.DailyLatency, 24)
 			latencyExists := false
@@ -350,9 +290,9 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 				}
 			}
 			ts.True(latencyExists)
-			ts.Equal(appLatency.From, time.Now().UTC().Add(-23*time.Hour).Truncate(time.Hour))
+			ts.Equal(appLatency.From, time.Now().UTC().Add(-24*time.Hour).Truncate(time.Hour))
 			ts.Equal(appLatency.To, time.Now().UTC().Truncate(time.Hour))
-			ts.Len(appLatency.Application, 37) // Test pub keys have 37 instead of 64 characters
+			ts.Len(appLatency.PortalAppID, 24)
 		}
 	})
 
@@ -368,12 +308,13 @@ var (
 type (
 	RelayMeterTestSuite struct {
 		suite.Suite
-		TestRelays                  [10]TestRelay
-		influxClient                influxdb2.Client
-		httpClient                  *httpclient.Client
-		startOfDay, endOfDay        time.Time
-		dateParams, orgID, testLBID string
-		options                     TestClientOptions
+		TestRelays           [10]TestRelay
+		influxClient         influxdb2.Client
+		httpClient           *httpclient.Client
+		startOfDay, endOfDay time.Time
+		testPortalAppID      types.PortalAppID
+		dateParams, orgID    string
+		options              TestClientOptions
 	}
 	TestClientOptions struct {
 		db.InfluxDBOptions
@@ -382,7 +323,7 @@ type (
 		relayMeterBaseURL string
 	}
 	TestRelay struct {
-		ApplicationPublicKey string  `json:"applicationPublicKey"`
+		PortalAppIDPublicKey string  `json:"applicationPublicKey"`
 		NodePublicKey        string  `json:"nodePublicKey"`
 		Method               string  `json:"method"`
 		Blockchain           string  `json:"blockchain"`
@@ -422,7 +363,7 @@ func (ts *RelayMeterTestSuite) SetupSuite() {
 	<-time.After(60 * time.Second) // Wait 65 seconds for collector to run and write to Postgres
 }
 
-// Sets the time period vars for the test (00:00.000 to 23:59:59.999 UTC of current day)
+// Sets the time period vars for the test (00:00.000 to 24:59:59.999 UTC of current day)
 func (ts *RelayMeterTestSuite) configureTimePeriod() {
 	ts.startOfDay = timeUtils.StartOfDay(time.Now().UTC())
 	ts.endOfDay = ts.startOfDay.AddDate(0, 0, 1).Add(-time.Millisecond)
@@ -582,7 +523,7 @@ func (ts *RelayMeterTestSuite) populateInfluxRelays() error {
 		relayPoint := influxdb2.NewPoint(
 			"relay",
 			map[string]string{
-				"applicationPublicKey": relay.ApplicationPublicKey,
+				"applicationPublicKey": relay.PortalAppIDPublicKey,
 				"nodePublicKey":        relay.NodePublicKey,
 				"method":               relay.Method,
 				"result":               result,
@@ -591,7 +532,7 @@ func (ts *RelayMeterTestSuite) populateInfluxRelays() error {
 				"region":               "us-east-2",
 			},
 			map[string]interface{}{
-				"bytes":       12345,
+				"bytes":       12445,
 				"elapsedTime": relay.ElapsedTime,
 			},
 			relayTimestamp,
@@ -601,7 +542,7 @@ func (ts *RelayMeterTestSuite) populateInfluxRelays() error {
 		originPoint := influxdb2.NewPoint(
 			"origin",
 			map[string]string{
-				"applicationPublicKey": relay.ApplicationPublicKey,
+				"applicationPublicKey": relay.PortalAppIDPublicKey,
 			},
 			map[string]interface{}{
 				"origin": relay.Origin,

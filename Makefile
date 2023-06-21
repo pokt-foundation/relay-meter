@@ -1,16 +1,31 @@
+SHELL := /bin/bash
+
 build:
 	CGO_ENABLED=0 GOOS=linux go build -a -o bin/collector ./cmd/collector/main.go
 	CGO_ENABLED=0 GOOS=linux go build -a -o bin/apiserver ./cmd/apiserver/main.go
 
 # These targets spin up and shut down the E2E test env in docker.
 test_env_up:
-	docker-compose -f ./testdata/docker-compose.test.yml up -d --remove-orphans --build
-	@echo "⏳ Waiting for test DB to be ready ..."
-	until pg_isready -h localhost -p 5432 -U postgres -d postgres >/dev/null 2>&1; do sleep 0.01; done
-	until pg_isready -h localhost -p 5434 -U postgres -d postgres >/dev/null 2>&1; do sleep 0.01; done
-	@echo "🚀 Test environment is up ..."
+	@echo "🧪 Starting up Relay Meter test environment ..."
+	@docker-compose -f ./testdata/docker-compose.test.yml up -d --remove-orphans --build >/dev/null
+	@echo "⏳ Waiting for test DBs to be ready ..."
+	@attempts=0; until pg_isready -h localhost -p 5432 -U postgres -d postgres >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 1; ((attempts++)); done
+	@[[ $$attempts -lt 5 ]] && echo "🐘 Test Portal DB is up ..." || (echo "❌ Test Portal DB failed to start" && make test_env_down >/dev/null && exit 1)
+	@attempts=0; until pg_isready -h localhost -p 5434 -U postgres -d postgres >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 1; ((attempts++)); done
+	@[[ $$attempts -lt 5 ]] && echo "🐘 Test Relay Meter DB is up ..." || (echo "❌ Test Portal DB failed to start" && make test_env_down >/dev/null && exit 1)
+	@echo "⏳ Performing health check on Pocket HTTP DB ..."
+	@attempts=0; until curl -s http://localhost:8080/healthz >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 1; ((attempts++)); done
+	@[[ $$attempts -lt 5 ]] && echo "🖥️  Pocket HTTP DB is online ..." || (echo "❌ Pocket HTTP DB failed health check" && make test_env_down >/dev/null && exit 1)
+	@echo "⏳ Performing health check on InfluxDB ..."
+	@attempts=0; until curl -s http://localhost:8086/ping >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 1; ((attempts++)); done
+	@[[ $$attempts -lt 5 ]] && echo "💾 InfluxDB is online ..." || (echo "❌ InfluxDB failed health check" && make test_env_down >/dev/null && exit 1)
+	@echo "⏳ Performing health check on Relay Meter API Server ..."
+	@attempts=0; until curl -s http://localhost:9898 >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 1; ((attempts++)); done
+	@[[ $$attempts -lt 5 ]] && echo "🔌 Relay Meter API Server is online ..." || (echo "❌ Endpoint on port 9898 failed health check" && make test_env_down >/dev/null && exit 1)
+	@echo "🚀 Test environment is up!"
 test_env_down:
-	docker-compose -f ./testdata/docker-compose.test.yml down --remove-orphans -v
+	@echo "🧪 Shutting down Relay Meter test environment ..."
+	@docker-compose -f ./testdata/docker-compose.test.yml down --remove-orphans >/dev/null
 	@echo "✅ Test environment is down."
 
 run_e2e_tests:

@@ -21,21 +21,21 @@ func (ts *PGDriverTestSuite) TestPostgresDriver_DailyCounts() {
 			to:   ts.to,
 			expected: map[time.Time]map[string]api.RelayCounts{
 				ts.to: {
-					"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+					"test_956d67d3ea93cbfe18a": { // pragma: allowlist secret
 						Success: 4,
 						Failure: 4,
 					},
-					"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+					"test_6b2faf2e3b061651297": { // pragma: allowlist secret
 						Success: 4,
 						Failure: 4,
 					},
 				},
 				ts.from: {
-					"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+					"test_956d67d3ea93cbfe18a": { // pragma: allowlist secret
 						Success: 3,
 						Failure: 3,
 					},
-					"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+					"test_6b2faf2e3b061651297": { // pragma: allowlist secret
 						Success: 3,
 						Failure: 3,
 					},
@@ -63,11 +63,11 @@ func (ts *PGDriverTestSuite) TestPostgresDriver_TodaysCounts() {
 		{
 			name: "Success",
 			expected: map[string]api.RelayCounts{
-				"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+				"test_956d67d3ea93cbfe18a": { // pragma: allowlist secret
 					Success: 5,
 					Failure: 5,
 				},
-				"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+				"test_6b2faf2e3b061651297": { // pragma: allowlist secret
 					Success: 5,
 					Failure: 5,
 				},

@@ -11,7 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	logger "github.com/sirupsen/logrus"
 
-	"github.com/pokt-foundation/portal-db/types"
+	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/utils-go/numbers"
 )
 
@@ -22,7 +22,7 @@ func TestUserRelays(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		user     string
+		user     types.UserID
 		from     time.Time
 		to       time.Time
 		expected UserRelaysResponse
@@ -36,7 +36,7 @@ func TestUserRelays(t *testing.T) {
 				From:         now.AddDate(0, 0, -6),
 				To:           now.AddDate(0, 0, 1),
 				User:         "user1",
-				Applications: []string{"app1", "app2", "app3"},
+				PortalAppIDs: []types.PortalAppID{"app1", "app2", "app3"},
 				Count: RelayCounts{
 					Success: 6*(2+1) + 50 + 30,
 					Failure: 6*(3+5) + 40 + 70,
@@ -52,7 +52,7 @@ func TestUserRelays(t *testing.T) {
 				From:         now.AddDate(0, 0, -6),
 				To:           now.AddDate(0, 0, -1),
 				User:         "user1",
-				Applications: []string{"app1", "app2", "app3"},
+				PortalAppIDs: []types.PortalAppID{"app1", "app2", "app3"},
 				Count: RelayCounts{
 					Success: 5 * (2 + 1),
 					Failure: 5 * (3 + 5),
@@ -68,7 +68,7 @@ func TestUserRelays(t *testing.T) {
 				From:         now,
 				To:           now.AddDate(0, 0, 1),
 				User:         "user1",
-				Applications: []string{"app1", "app2", "app3"},
+				PortalAppIDs: []types.PortalAppID{"app1", "app2", "app3"},
 				Count: RelayCounts{
 					Success: 50 + 30,
 					Failure: 40 + 70,
@@ -84,7 +84,7 @@ func TestUserRelays(t *testing.T) {
 			fakeBackend := fakeBackend{
 				usage:       usageData,
 				todaysUsage: todaysUsage,
-				userApps: map[string][]string{
+				userApps: map[types.UserID][]types.PortalAppID{
 					"user1": {"app1", "app2", "app3"},
 					"user2": {"app4", "app5", "app6"},
 				},
@@ -179,565 +179,13 @@ func TestTotalRelays(t *testing.T) {
 	}
 }
 
-func TestAppRelays(t *testing.T) {
-	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
-	usageData := fakeDailyMetrics()
-	todaysUsage := fakeTodaysMetrics()
-	requestedApp := "app1"
-
-	testCases := []struct {
-		name                string
-		from                time.Time
-		to                  time.Time
-		usageData           map[time.Time]map[string]int64
-		todaysUsage         map[string]int64
-		expected            AppRelaysResponse
-		expectedErr         error
-		expectedTodaysCalls int
-	}{
-		{
-			name: "Correct count is returned",
-			from: now.AddDate(0, 0, -5),
-			to:   now.AddDate(0, 0, -1),
-			expected: AppRelaysResponse{
-				Application: requestedApp,
-				From:        now.AddDate(0, 0, -5),
-				To:          now,
-				Count: RelayCounts{
-					Success: 5 * 2,
-					Failure: 5 * 3,
-				},
-			},
-		},
-		{
-			name: "From and To parameters are adjusted to start of the specifed day and the next day, respectively",
-			from: time.Now().AddDate(0, 0, -5),
-			to:   time.Now().AddDate(0, 0, -1),
-			expected: AppRelaysResponse{
-				Application: "app1",
-				From:        now.AddDate(0, 0, -5),
-				To:          now,
-				Count: RelayCounts{
-					Success: 5 * 2,
-					Failure: 5 * 3,
-				},
-			},
-		},
-		{
-			name: "Equal values are allowed for From and To parameters (to cover a single day)",
-			from: now.AddDate(0, 0, -3),
-			to:   now.AddDate(0, 0, -3),
-			expected: AppRelaysResponse{
-				Application: "app1",
-				From:        now.AddDate(0, 0, -3),
-				To:          now.AddDate(0, 0, -2),
-				Count: RelayCounts{
-					Success: 1 * 2,
-					Failure: 1 * 3,
-				},
-			},
-		},
-		{
-			name: "Today's metrics are added to previous days' usage data",
-			from: now.AddDate(0, 0, -3),
-			to:   now,
-			todaysUsage: map[string]int64{
-				"app1": 50,
-				"app2": 30,
-			},
-			expected: AppRelaysResponse{
-				Application: "app1",
-				From:        now.AddDate(0, 0, -3),
-				To:          now.AddDate(0, 0, 1),
-				Count: RelayCounts{
-					Success: 3*2 + 50,
-					Failure: 3*3 + 40,
-				},
-			},
-		},
-		{
-			name: "Only today's data is included when from and to parameters point to today",
-			from: now,
-			to:   now,
-			expected: AppRelaysResponse{
-				Application: "app1",
-				From:        now,
-				To:          now.AddDate(0, 0, 1),
-				Count: RelayCounts{
-					Success: 50,
-					Failure: 40,
-				},
-			},
-		},
-		{
-			name: "Today's metrics are not included when the 'to' parameter does not include today",
-			from: time.Now().AddDate(0, 0, -3),
-			to:   time.Now().AddDate(0, 0, -1),
-			expected: AppRelaysResponse{
-				Application: "app1",
-				From:        now.AddDate(0, 0, -3),
-				To:          now,
-				Count: RelayCounts{
-					Success: 3 * 2,
-					Failure: 3 * 3,
-				},
-			},
-		},
-		{
-			name: "Today's metrics are included when the 'to' parameter is after today",
-			from: time.Now().AddDate(0, 0, -3),
-			to:   time.Now().AddDate(0, 0, 2),
-			expected: AppRelaysResponse{
-				Application: "app1",
-				From:        now.AddDate(0, 0, -3),
-				To:          now.AddDate(0, 0, 3),
-				Count: RelayCounts{
-					Success: 3*2 + 50,
-					Failure: 3*3 + 40,
-				},
-			},
-		},
-		{
-			name: "Only today's metrics are included when the timespan only includes today",
-			from: time.Now(),
-			to:   time.Now().AddDate(0, 0, 2),
-			expected: AppRelaysResponse{
-				Application: "app1",
-				From:        now,
-				To:          now.AddDate(0, 0, 3),
-				Count: RelayCounts{
-					Success: 50,
-					Failure: 40,
-				},
-			},
-		},
-		{
-			name: "Missing parameters' default values",
-			expected: AppRelaysResponse{
-				Application: "app1",
-				From:        now.AddDate(0, 0, -30),
-				To:          now.AddDate(0, 0, 1),
-				Count: RelayCounts{
-					Success: 6*2 + 50,
-					Failure: 6*3 + 40,
-				},
-			},
-		},
-		{
-			name:        "Invalid timespan is rejected",
-			from:        now.AddDate(0, 0, -1),
-			to:          now.AddDate(0, 0, -2),
-			expectedErr: fmt.Errorf("Invalid timespan"),
-			expected: AppRelaysResponse{
-				Application: "app1",
-				From:        now.AddDate(0, 0, -1),
-				To:          now.AddDate(0, 0, -2),
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			fakeBackend := fakeBackend{
-				usage:       usageData,
-				todaysUsage: todaysUsage,
-			}
-
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
-			time.Sleep(200 * time.Millisecond)
-			got, err := relayMeter.AppRelays(context.Background(), requestedApp, tc.from, tc.to)
-			if err != nil {
-				if tc.expectedErr == nil {
-					t.Fatalf("Unexpected error: %v", err)
-				}
-				if !strings.Contains(err.Error(), tc.expectedErr.Error()) {
-					t.Fatalf("Expected error to contain: %q, got: %v", tc.expectedErr.Error(), err)
-				}
-			}
-
-			if diff := cmp.Diff(tc.expected, got); diff != "" {
-				t.Errorf("unexpected value (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestAllAppsRelays(t *testing.T) {
-	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
-	usageData := fakeDailyMetrics()
-	todaysUsage := fakeTodaysMetrics()
-
-	testCases := []struct {
-		name                string
-		from                time.Time
-		to                  time.Time
-		usageData           map[time.Time]map[string]int64
-		todaysUsage         map[string]int64
-		expected            map[string]AppRelaysResponse
-		expectedErr         error
-		expectedTodaysCalls int
-	}{
-		{
-			name: "Correct count is returned",
-			from: now.AddDate(0, 0, -5),
-			to:   now.AddDate(0, 0, -1),
-			expected: map[string]AppRelaysResponse{
-				"app1": {
-					Application: "app1",
-					From:        now.AddDate(0, 0, -5),
-					To:          now,
-					Count: RelayCounts{
-						Success: 10,
-						Failure: 15,
-					},
-				},
-				"app2": {
-					Application: "app2",
-					From:        now.AddDate(0, 0, -5),
-					To:          now,
-					Count: RelayCounts{
-						Success: 5,
-						Failure: 25,
-					},
-				},
-				"app4": {
-					Application: "app4",
-					From:        now.AddDate(0, 0, -5),
-					To:          now,
-					Count: RelayCounts{
-						Success: 25,
-						Failure: 35,
-					},
-				},
-			},
-		},
-		{
-			name: "From and To parameters are adjusted to start of the specifed day and the next day, respectively",
-			from: time.Now().AddDate(0, 0, -5),
-			to:   time.Now().AddDate(0, 0, -1),
-			expected: map[string]AppRelaysResponse{
-				"app1": {
-					Application: "app1",
-					From:        now.AddDate(0, 0, -5),
-					To:          now,
-					Count: RelayCounts{
-						Success: 10,
-						Failure: 15,
-					},
-				},
-				"app2": {
-					Application: "app2",
-					From:        now.AddDate(0, 0, -5),
-					To:          now,
-					Count: RelayCounts{
-						Success: 5,
-						Failure: 25,
-					},
-				},
-				"app4": {
-					Application: "app4",
-					From:        now.AddDate(0, 0, -5),
-					To:          now,
-					Count: RelayCounts{
-						Success: 25,
-						Failure: 35,
-					},
-				},
-			},
-		},
-		{
-			name: "Equal values are allowed for From and To parameters (to cover a single day)",
-			from: now.AddDate(0, 0, -3),
-			to:   now.AddDate(0, 0, -3),
-			expected: map[string]AppRelaysResponse{
-				"app1": {
-					Application: "app1",
-					From:        now.AddDate(0, 0, -3),
-					To:          now.AddDate(0, 0, -2),
-					Count: RelayCounts{
-						Success: 2,
-						Failure: 3,
-					},
-				},
-				"app2": {
-					Application: "app2",
-					From:        now.AddDate(0, 0, -3),
-					To:          now.AddDate(0, 0, -2),
-					Count: RelayCounts{
-						Success: 1,
-						Failure: 5,
-					},
-				},
-				"app4": {
-					Application: "app4",
-					From:        now.AddDate(0, 0, -3),
-					To:          now.AddDate(0, 0, -2),
-					Count: RelayCounts{
-						Success: 5,
-						Failure: 7,
-					},
-				},
-			},
-		},
-		{
-			name: "Today's metrics are added to previous days' usage data",
-			from: now.AddDate(0, 0, -3),
-			to:   now,
-			todaysUsage: map[string]int64{
-				"app1": 50,
-				"app2": 30,
-			},
-			expected: map[string]AppRelaysResponse{
-				"app1": {
-					Application: "app1",
-					From:        now.AddDate(0, 0, -3),
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 56,
-						Failure: 49,
-					},
-				},
-				"app2": {
-					Application: "app2",
-					From:        now.AddDate(0, 0, -3),
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 33,
-						Failure: 85,
-					},
-				},
-				"app4": {
-					Application: "app4",
-					From:        now.AddDate(0, 0, -3),
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 515,
-						Failure: 721,
-					},
-				},
-			},
-		},
-		{
-			name: "Only today's data is included when from and to parameters point to today",
-			from: now,
-			to:   now,
-			expected: map[string]AppRelaysResponse{
-				"app1": {
-					Application: "app1",
-					From:        now,
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 50,
-						Failure: 40,
-					},
-				},
-				"app2": {
-					Application: "app2",
-					From:        now,
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 30,
-						Failure: 70,
-					},
-				},
-				"app4": {
-					Application: "app4",
-					From:        now,
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 500,
-						Failure: 700,
-					},
-				},
-			},
-		},
-		{
-			name: "Today's metrics are not included when the 'to' parameter does not include today",
-			from: time.Now().AddDate(0, 0, -3),
-			to:   time.Now().AddDate(0, 0, -1),
-			expected: map[string]AppRelaysResponse{
-				"app1": {
-					Application: "app1",
-					From:        now.AddDate(0, 0, -3),
-					To:          now,
-					Count: RelayCounts{
-						Success: 6,
-						Failure: 9,
-					},
-				},
-				"app2": {
-					Application: "app2",
-					From:        now.AddDate(0, 0, -3),
-					To:          now,
-					Count: RelayCounts{
-						Success: 3,
-						Failure: 15,
-					},
-				},
-				"app4": {
-					Application: "app4",
-					From:        now.AddDate(0, 0, -3),
-					To:          now,
-					Count: RelayCounts{
-						Success: 15,
-						Failure: 21,
-					},
-				},
-			},
-		},
-		{
-			name: "Today's metrics are included when the 'to' parameter is after today",
-			from: time.Now().AddDate(0, 0, -3),
-			to:   time.Now().AddDate(0, 0, 2),
-			expected: map[string]AppRelaysResponse{
-				"app1": {
-					Application: "app1",
-					From:        now.AddDate(0, 0, -3),
-					To:          now.AddDate(0, 0, 3),
-					Count: RelayCounts{
-						Success: 56,
-						Failure: 49,
-					},
-				},
-				"app2": {
-					Application: "app2",
-					From:        now.AddDate(0, 0, -3),
-					To:          now.AddDate(0, 0, 3),
-					Count: RelayCounts{
-						Success: 33,
-						Failure: 85,
-					},
-				},
-				"app4": {
-					Application: "app4",
-					From:        now.AddDate(0, 0, -3),
-					To:          now.AddDate(0, 0, 3),
-					Count: RelayCounts{
-						Success: 515,
-						Failure: 721,
-					},
-				},
-			},
-		},
-		{
-			name: "Only today's metrics are included when the timespan only includes today",
-			from: time.Now(),
-			to:   time.Now().AddDate(0, 0, 2),
-			expected: map[string]AppRelaysResponse{
-				"app1": {
-					Application: "app1",
-					From:        now,
-					To:          now.AddDate(0, 0, 3),
-					Count: RelayCounts{
-						Success: 50,
-						Failure: 40,
-					},
-				},
-				"app2": {
-					Application: "app2",
-					From:        now,
-					To:          now.AddDate(0, 0, 3),
-					Count: RelayCounts{
-						Success: 30,
-						Failure: 70,
-					},
-				},
-				"app4": {
-					Application: "app4",
-					From:        now,
-					To:          now.AddDate(0, 0, 3),
-					Count: RelayCounts{
-						Success: 500,
-						Failure: 700,
-					},
-				},
-			},
-		},
-		{
-			name: "Missing parameters' default values",
-			expected: map[string]AppRelaysResponse{
-				"app1": {
-					Application: "app1",
-					From:        now.AddDate(0, 0, -30),
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 62,
-						Failure: 58,
-					},
-				},
-				"app2": {
-					Application: "app2",
-					From:        now.AddDate(0, 0, -30),
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 36,
-						Failure: 100,
-					},
-				},
-				"app4": {
-					Application: "app4",
-					From:        now.AddDate(0, 0, -30),
-					To:          now.AddDate(0, 0, 1),
-					Count: RelayCounts{
-						Success: 530,
-						Failure: 742,
-					},
-				},
-			},
-		},
-		{
-			name:        "Invalid timespan is rejected",
-			from:        now.AddDate(0, 0, -1),
-			to:          now.AddDate(0, 0, -2),
-			expectedErr: fmt.Errorf("Invalid timespan"),
-			expected:    map[string]AppRelaysResponse{},
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			fakeBackend := fakeBackend{
-				usage:       usageData,
-				todaysUsage: todaysUsage,
-			}
-
-			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
-			time.Sleep(200 * time.Millisecond)
-			rawGot, err := relayMeter.AllAppsRelays(context.Background(), tc.from, tc.to)
-			if err != nil {
-				if tc.expectedErr == nil {
-					t.Fatalf("Unexpected error: %v", err)
-				}
-				if !strings.Contains(err.Error(), tc.expectedErr.Error()) {
-					t.Fatalf("Expected error to contain: %q, got: %v", tc.expectedErr.Error(), err)
-				}
-			}
-
-			// Need to convert it to map to be able to compare
-			got := make(map[string]AppRelaysResponse, len(rawGot))
-
-			for _, relResp := range rawGot {
-				got[relResp.Application] = relResp
-			}
-
-			if diff := cmp.Diff(tc.expected, got); diff != "" {
-				t.Errorf("unexpected value (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
 func TestAppLatency(t *testing.T) {
 	todaysLatency := fakeTodaysLatency()
 	errBackendFailure := errors.New("backend error")
 
 	testCases := []struct {
 		name                string
-		requestedApp        string
+		requestedApp        types.PortalAppID
 		expected            AppLatencyResponse
 		backendErr          error
 		expectedErr         error
@@ -747,7 +195,7 @@ func TestAppLatency(t *testing.T) {
 			name:         "Correct latency data is returned",
 			requestedApp: "app1",
 			expected: AppLatencyResponse{
-				Application:  "app1",
+				PortalAppID:  "app1",
 				From:         todaysLatency["app1"][0].Time,
 				To:           todaysLatency["app1"][len(todaysLatency["app1"])-1].Time,
 				DailyLatency: todaysLatency["app1"],
@@ -800,8 +248,8 @@ func TestAllAppsLatencies(t *testing.T) {
 
 	testCases := []struct {
 		name                string
-		todaysLatency       map[string][]Latency
-		expected            map[string]AppLatencyResponse
+		todaysLatency       map[types.PortalAppID][]Latency
+		expected            map[types.PortalAppID]AppLatencyResponse
 		emptyLatencySlice   bool
 		expectedErr         error
 		backendErr          error
@@ -809,21 +257,21 @@ func TestAllAppsLatencies(t *testing.T) {
 	}{
 		{
 			name: "Correct latency data is returned",
-			expected: map[string]AppLatencyResponse{
+			expected: map[types.PortalAppID]AppLatencyResponse{
 				"app1": {
-					Application:  "app1",
+					PortalAppID:  "app1",
 					From:         todaysLatency["app1"][0].Time,
 					To:           todaysLatency["app1"][len(todaysLatency["app1"])-1].Time,
 					DailyLatency: todaysLatency["app1"],
 				},
 				"app2": {
-					Application:  "app2",
+					PortalAppID:  "app2",
 					From:         todaysLatency["app2"][0].Time,
 					To:           todaysLatency["app2"][len(todaysLatency["app2"])-1].Time,
 					DailyLatency: todaysLatency["app2"],
 				},
 				"app4": {
-					Application:  "app4",
+					PortalAppID:  "app4",
 					From:         todaysLatency["app4"][0].Time,
 					To:           todaysLatency["app4"][len(todaysLatency["app4"])-1].Time,
 					DailyLatency: todaysLatency["app4"],
@@ -834,14 +282,14 @@ func TestAllAppsLatencies(t *testing.T) {
 			name:        "Backend service error",
 			backendErr:  errBackendFailure,
 			expectedErr: errBackendFailure,
-			expected:    map[string]AppLatencyResponse{},
+			expected:    map[types.PortalAppID]AppLatencyResponse{},
 		},
 		{
 			name:              "Empty latency response",
 			backendErr:        nil,
 			expectedErr:       nil,
 			emptyLatencySlice: true,
-			expected:          map[string]AppLatencyResponse{},
+			expected:          map[types.PortalAppID]AppLatencyResponse{},
 		},
 	}
 
@@ -873,10 +321,10 @@ func TestAllAppsLatencies(t *testing.T) {
 			}
 
 			// Need to convert it to map to be able to compare
-			got := make(map[string]AppLatencyResponse, len(rawGot))
+			got := make(map[types.PortalAppID]AppLatencyResponse, len(rawGot))
 
 			for _, relResp := range rawGot {
-				got[relResp.Application] = relResp
+				got[relResp.PortalAppID] = relResp
 			}
 
 			if diff := cmp.Diff(tc.expected, got); diff != "" {
@@ -886,25 +334,25 @@ func TestAllAppsLatencies(t *testing.T) {
 	}
 }
 
-func TestLoadBalancerRelays(t *testing.T) {
+func TestPortalAppRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
 	usageData := fakeDailyMetrics()
 	todaysUsage := fakeTodaysMetrics()
 	errBackendFailure := errors.New("backend error")
 
 	testCases := []struct {
-		name         string
-		loadbalancer string
-		from         time.Time
-		to           time.Time
-		backendErr   error
+		name        string
+		portalAppID types.PortalAppID
+		from        time.Time
+		to          time.Time
+		backendErr  error
 
-		expected    LoadBalancerRelaysResponse
+		expected    PortalAppRelaysResponse
 		expectedErr error
 	}{
 		{
-			name:        "LoadBalancer not found error",
-			expectedErr: ErrLoadBalancerNotFound,
+			name:        "PortalApp not found error",
+			expectedErr: ErrPortalAppNotFound,
 		},
 		{
 			name:        "Backend service error",
@@ -912,15 +360,14 @@ func TestLoadBalancerRelays(t *testing.T) {
 			expectedErr: errBackendFailure,
 		},
 		{
-			name:         "Correct summary for a loadbalancer",
-			loadbalancer: "lb1",
-			from:         now.AddDate(0, 0, -6),
-			to:           now,
-			expected: LoadBalancerRelaysResponse{
-				From:         now.AddDate(0, 0, -6),
-				To:           now.AddDate(0, 0, 1),
-				Endpoint:     "lb1",
-				Applications: []string{"app1", "app2", "app3"},
+			name:        "Correct summary for a portalAppID",
+			portalAppID: "app1",
+			from:        now.AddDate(0, 0, -6),
+			to:          now,
+			expected: PortalAppRelaysResponse{
+				From:        now.AddDate(0, 0, -6),
+				To:          now.AddDate(0, 0, 1),
+				PortalAppID: "app1",
 				Count: RelayCounts{
 					Success: 6*(2+1) + 50 + 30,
 					Failure: 6*(3+5) + 40 + 70,
@@ -928,15 +375,14 @@ func TestLoadBalancerRelays(t *testing.T) {
 			},
 		},
 		{
-			name:         "Correct summary for a loadbalancer excluding today",
-			loadbalancer: "lb1",
-			from:         now.AddDate(0, 0, -6),
-			to:           now.AddDate(0, 0, -2),
-			expected: LoadBalancerRelaysResponse{
-				From:         now.AddDate(0, 0, -6),
-				To:           now.AddDate(0, 0, -1),
-				Endpoint:     "lb1",
-				Applications: []string{"app1", "app2", "app3"},
+			name:        "Correct summary for a portalAppID excluding today",
+			portalAppID: "app1",
+			from:        now.AddDate(0, 0, -6),
+			to:          now.AddDate(0, 0, -2),
+			expected: PortalAppRelaysResponse{
+				From:        now.AddDate(0, 0, -6),
+				To:          now.AddDate(0, 0, -1),
+				PortalAppID: "app1",
 				Count: RelayCounts{
 					Success: 5 * (2 + 1),
 					Failure: 5 * (3 + 5),
@@ -944,15 +390,14 @@ func TestLoadBalancerRelays(t *testing.T) {
 			},
 		},
 		{
-			name:         "Correct summary for a loadbalancer on todays metrics",
-			loadbalancer: "lb1",
-			from:         now,
-			to:           now,
-			expected: LoadBalancerRelaysResponse{
-				From:         now,
-				To:           now.AddDate(0, 0, 1),
-				Endpoint:     "lb1",
-				Applications: []string{"app1", "app2", "app3"},
+			name:        "Correct summary for a portalAppID on todays metrics",
+			portalAppID: "app1",
+			from:        now,
+			to:          now,
+			expected: PortalAppRelaysResponse{
+				From:        now,
+				To:          now.AddDate(0, 0, 1),
+				PortalAppID: "app1",
 				Count: RelayCounts{
 					Success: 50 + 30,
 					Failure: 40 + 70,
@@ -968,20 +413,12 @@ func TestLoadBalancerRelays(t *testing.T) {
 			fakeBackend := fakeBackend{
 				usage:       usageData,
 				todaysUsage: todaysUsage,
-				loadbalancers: map[string]*types.LoadBalancer{
-					"lb1": {
-						Applications: []*types.Application{
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app1"}},
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app2"}},
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app3"}},
-						},
+				portalApps: map[types.PortalAppID]*types.PortalApp{
+					"app1": {
+						ID: "app1",
 					},
-					"lb2": {
-						Applications: []*types.Application{
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app4"}},
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app5"}},
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app6"}},
-						},
+					"app2": {
+						ID: "app2",
 					},
 				},
 				err: tc.backendErr,
@@ -989,7 +426,7 @@ func TestLoadBalancerRelays(t *testing.T) {
 
 			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			got, err := relayMeter.LoadBalancerRelays(context.Background(), tc.loadbalancer, tc.from, tc.to)
+			got, err := relayMeter.PortalAppRelays(context.Background(), tc.portalAppID, tc.from, tc.to)
 			if err != nil && !errors.Is(err, tc.expectedErr) {
 				t.Fatalf("Expected error: %v, got: %v", tc.expectedErr, err)
 			}
@@ -1001,7 +438,7 @@ func TestLoadBalancerRelays(t *testing.T) {
 	}
 }
 
-func TestAllLoadBalancersRelays(t *testing.T) {
+func TestAllPortalAppsRelays(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
 	usageData := fakeDailyMetrics()
 	todaysUsage := fakeTodaysMetrics()
@@ -1013,35 +450,33 @@ func TestAllLoadBalancersRelays(t *testing.T) {
 		to         time.Time
 		backendErr error
 
-		expected    map[string]LoadBalancerRelaysResponse
+		expected    map[types.PortalAppID]PortalAppRelaysResponse
 		expectedErr error
 	}{
 		{
 			name:        "Backend service error",
 			backendErr:  errBackendFailure,
 			expectedErr: errBackendFailure,
-			expected:    map[string]LoadBalancerRelaysResponse{},
+			expected:    map[types.PortalAppID]PortalAppRelaysResponse{},
 		},
 		{
-			name: "Correct summary for loadbalancers",
+			name: "Correct summary for portalApps",
 			from: now.AddDate(0, 0, -6),
 			to:   now,
-			expected: map[string]LoadBalancerRelaysResponse{
-				"lb1": {
-					From:         now.AddDate(0, 0, -6),
-					To:           now.AddDate(0, 0, 1),
-					Endpoint:     "lb1",
-					Applications: []string{"app1", "app2", "app3"},
+			expected: map[types.PortalAppID]PortalAppRelaysResponse{
+				"app1": {
+					From:        now.AddDate(0, 0, -6),
+					To:          now.AddDate(0, 0, 1),
+					PortalAppID: "app1",
 					Count: RelayCounts{
 						Success: 98,
 						Failure: 158,
 					},
 				},
-				"lb2": {
-					From:         now.AddDate(0, 0, -6),
-					To:           now.AddDate(0, 0, 1),
-					Endpoint:     "lb2",
-					Applications: []string{"app4", "app5", "app6"},
+				"app2": {
+					From:        now.AddDate(0, 0, -6),
+					To:          now.AddDate(0, 0, 1),
+					PortalAppID: "app2",
 					Count: RelayCounts{
 						Success: 530,
 						Failure: 742,
@@ -1050,25 +485,23 @@ func TestAllLoadBalancersRelays(t *testing.T) {
 			},
 		},
 		{
-			name: "Correct summary for loadbalancers excluding today",
+			name: "Correct summary for portalApps excluding today",
 			from: now.AddDate(0, 0, -6),
 			to:   now.AddDate(0, 0, -2),
-			expected: map[string]LoadBalancerRelaysResponse{
-				"lb1": {
-					From:         now.AddDate(0, 0, -6),
-					To:           now.AddDate(0, 0, -1),
-					Endpoint:     "lb1",
-					Applications: []string{"app1", "app2", "app3"},
+			expected: map[types.PortalAppID]PortalAppRelaysResponse{
+				"app1": {
+					From:        now.AddDate(0, 0, -6),
+					To:          now.AddDate(0, 0, -1),
+					PortalAppID: "app1",
 					Count: RelayCounts{
 						Success: 15,
 						Failure: 40,
 					},
 				},
-				"lb2": {
-					From:         now.AddDate(0, 0, -6),
-					To:           now.AddDate(0, 0, -1),
-					Endpoint:     "lb2",
-					Applications: []string{"app4", "app5", "app6"},
+				"app2": {
+					From:        now.AddDate(0, 0, -6),
+					To:          now.AddDate(0, 0, -1),
+					PortalAppID: "app2",
 					Count: RelayCounts{
 						Success: 25,
 						Failure: 35,
@@ -1077,25 +510,23 @@ func TestAllLoadBalancersRelays(t *testing.T) {
 			},
 		},
 		{
-			name: "Correct summary for loadbalancers on todays metrics",
+			name: "Correct summary for portalApps on todays metrics",
 			from: now,
 			to:   now,
-			expected: map[string]LoadBalancerRelaysResponse{
-				"lb1": {
-					From:         now,
-					To:           now.AddDate(0, 0, 1),
-					Endpoint:     "lb1",
-					Applications: []string{"app1", "app2", "app3"},
+			expected: map[types.PortalAppID]PortalAppRelaysResponse{
+				"app1": {
+					From:        now,
+					To:          now.AddDate(0, 0, 1),
+					PortalAppID: "app1",
 					Count: RelayCounts{
 						Success: 80,
 						Failure: 110,
 					},
 				},
-				"lb2": {
-					From:         now,
-					To:           now.AddDate(0, 0, 1),
-					Endpoint:     "lb2",
-					Applications: []string{"app4", "app5", "app6"},
+				"app2": {
+					From:        now,
+					To:          now.AddDate(0, 0, 1),
+					PortalAppID: "app2",
 					Count: RelayCounts{
 						Success: 500,
 						Failure: 700,
@@ -1112,22 +543,12 @@ func TestAllLoadBalancersRelays(t *testing.T) {
 			fakeBackend := fakeBackend{
 				usage:       usageData,
 				todaysUsage: todaysUsage,
-				loadbalancers: map[string]*types.LoadBalancer{
-					"lb1": {
-						ID: "lb1",
-						Applications: []*types.Application{
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app1"}},
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app2"}},
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app3"}},
-						},
+				portalApps: map[types.PortalAppID]*types.PortalApp{
+					"app1": {
+						ID: "app1",
 					},
-					"lb2": {
-						ID: "lb2",
-						Applications: []*types.Application{
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app4"}},
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app5"}},
-							{GatewayAAT: types.GatewayAAT{ApplicationPublicKey: "app6"}},
-						},
+					"app2": {
+						ID: "app2",
 					},
 				},
 				err: tc.backendErr,
@@ -1135,16 +556,16 @@ func TestAllLoadBalancersRelays(t *testing.T) {
 
 			relayMeter := NewRelayMeter(context.Background(), &fakeBackend, &fakeDriver{}, logger.New(), RelayMeterOptions{LoadInterval: 100 * time.Millisecond})
 			time.Sleep(200 * time.Millisecond)
-			rawGot, err := relayMeter.AllLoadBalancersRelays(context.Background(), tc.from, tc.to)
+			rawGot, err := relayMeter.AllPortalAppsRelays(context.Background(), tc.from, tc.to)
 			if err != nil && !errors.Is(err, tc.expectedErr) {
 				t.Fatalf("Expected error: %v, got: %v", tc.expectedErr, err)
 			}
 
 			// Need to convert it to map to be able to compare
-			got := make(map[string]LoadBalancerRelaysResponse, len(rawGot))
+			got := make(map[types.PortalAppID]PortalAppRelaysResponse, len(rawGot))
 
 			for _, relResp := range rawGot {
-				got[relResp.Endpoint] = relResp
+				got[relResp.PortalAppID] = relResp
 			}
 
 			if diff := cmp.Diff(tc.expected, got); diff != "" {
@@ -1206,7 +627,7 @@ func TestStartDataLoader(t *testing.T) {
 
 func TestAllRelaysOrigin(t *testing.T) {
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
-	todaysUsage := fakeTodaysMetrics()
+	todaysUsage := fakeTodaysOriginMetrics()
 
 	testCases := []struct {
 		name                string
@@ -1361,34 +782,34 @@ func TestAllRelaysOrigin(t *testing.T) {
 }
 
 type fakeBackend struct {
-	usage              map[time.Time]map[string]RelayCounts
+	usage              map[time.Time]map[types.PortalAppID]RelayCounts
 	err                error
-	todaysUsage        map[string]RelayCounts
+	todaysUsage        map[types.PortalAppID]RelayCounts
 	todaysOriginUsage  map[string]RelayCounts
-	todaysLatency      map[string][]Latency
-	userApps           map[string][]string
+	todaysLatency      map[types.PortalAppID][]Latency
+	userApps           map[types.UserID][]types.PortalAppID
 	todaysMetricsCalls int
 	todaysLatencyCalls int
 	dailyMetricsCalls  int
 	dailyMetricsFrom   time.Time
 	dailyMetricsTo     time.Time
 
-	loadbalancers map[string]*types.LoadBalancer
+	portalApps map[types.PortalAppID]*types.PortalApp
 }
 
-func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error) {
+func (f *fakeBackend) DailyUsage(from, to time.Time) (map[time.Time]map[types.PortalAppID]RelayCounts, error) {
 	f.dailyMetricsCalls++
 	f.dailyMetricsFrom = from
 	f.dailyMetricsTo = to
 	return f.usage, f.err
 }
 
-func (f *fakeBackend) TodaysUsage() (map[string]RelayCounts, error) {
+func (f *fakeBackend) TodaysUsage() (map[types.PortalAppID]RelayCounts, error) {
 	f.todaysMetricsCalls++
 	return f.todaysUsage, f.err
 }
 
-func (f *fakeBackend) TodaysLatency() (map[string][]Latency, error) {
+func (f *fakeBackend) TodaysLatency() (map[types.PortalAppID][]Latency, error) {
 	f.todaysLatencyCalls++
 	return f.todaysLatency, f.err
 }
@@ -1397,40 +818,48 @@ func (f *fakeBackend) TodaysOriginUsage() (map[string]RelayCounts, error) {
 	return f.todaysOriginUsage, nil
 }
 
-func (f *fakeBackend) UserApps(ctx context.Context, user string) ([]string, error) {
+func (f *fakeBackend) UserPortalAppIDs(ctx context.Context, user types.UserID) ([]types.PortalAppID, error) {
 	return f.userApps[user], nil
 }
 
-func (f *fakeBackend) LoadBalancer(ctx context.Context, endpoint string) (*types.LoadBalancer, error) {
-	return f.loadbalancers[endpoint], f.err
+func (f *fakeBackend) PortalApp(ctx context.Context, portalAppID types.PortalAppID) (*types.PortalApp, error) {
+	return f.portalApps[portalAppID], f.err
 }
 
-func (f *fakeBackend) LoadBalancers(ctx context.Context) ([]*types.LoadBalancer, error) {
-	var lbs []*types.LoadBalancer
+func (f *fakeBackend) PortalApps(ctx context.Context) ([]*types.PortalApp, error) {
+	var portalApps []*types.PortalApp
 
-	for _, lb := range f.loadbalancers {
-		lbs = append(lbs, lb)
+	for _, portalApp := range f.portalApps {
+		portalApps = append(portalApps, portalApp)
 	}
 
-	return lbs, f.err
+	return portalApps, f.err
 }
 
-func fakeDailyMetrics() map[time.Time]map[string]RelayCounts {
-	dayMetrics := map[string]RelayCounts{
+func fakeDailyMetrics() map[time.Time]map[types.PortalAppID]RelayCounts {
+	dayMetrics := map[types.PortalAppID]RelayCounts{
 		"app1": {Success: 2, Failure: 3},
 		"app2": {Success: 1, Failure: 5},
 		"app4": {Success: 5, Failure: 7},
 	}
 
 	now, _ := time.Parse(dayFormat, time.Now().Format(dayFormat))
-	metrics := make(map[time.Time]map[string]RelayCounts)
+	metrics := make(map[time.Time]map[types.PortalAppID]RelayCounts)
 	for i := 1; i < 7; i++ {
 		metrics[now.AddDate(0, 0, -1*i)] = dayMetrics
 	}
 	return metrics
 }
 
-func fakeTodaysMetrics() map[string]RelayCounts {
+func fakeTodaysMetrics() map[types.PortalAppID]RelayCounts {
+	return map[types.PortalAppID]RelayCounts{
+		"app1": {Success: 50, Failure: 40},
+		"app2": {Success: 30, Failure: 70},
+		"app4": {Success: 500, Failure: 700},
+	}
+}
+
+func fakeTodaysOriginMetrics() map[string]RelayCounts {
 	return map[string]RelayCounts{
 		"app1": {Success: 50, Failure: 40},
 		"app2": {Success: 30, Failure: 70},
@@ -1438,7 +867,7 @@ func fakeTodaysMetrics() map[string]RelayCounts {
 	}
 }
 
-func fakeTodaysLatency() map[string][]Latency {
+func fakeTodaysLatency() map[types.PortalAppID][]Latency {
 	hourFormat := "2006-01-02 15:04:00Z"
 	now, _ := time.Parse(hourFormat, time.Now().Format(hourFormat))
 
@@ -1451,7 +880,7 @@ func fakeTodaysLatency() map[string][]Latency {
 		})
 	}
 
-	return map[string][]Latency{
+	return map[types.PortalAppID][]Latency{
 		"app1": latencyMetrics,
 		"app2": latencyMetrics,
 		"app4": latencyMetrics,

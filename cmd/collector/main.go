@@ -40,7 +40,7 @@ func gatherOptions() options {
 	}
 }
 
-// TODO: need a /health endpoint
+// TODO: need a /healthz endpoint
 func main() {
 	influxOptions := cmd.GatherInfluxOptions()
 	postgresOptions := cmd.GatherPostgresOptions()

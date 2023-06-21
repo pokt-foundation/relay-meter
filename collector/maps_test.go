@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
 )
 
@@ -13,108 +14,108 @@ func TestMergeApps(t *testing.T) {
 	fakeDay2 := fakeDay1.AddDate(0, 0, 1)
 	fakeDay3 := fakeDay1.AddDate(0, 0, 2)
 
-	source1 := map[time.Time]map[string]api.RelayCounts{
+	source1 := map[time.Time]map[types.PortalAppID]api.RelayCounts{
 		fakeDay2: {
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+			"test_956d67d3ea93cbfe18a": {
 				Success: 4,
 				Failure: 4,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+			"test_6b2faf2e3b061651297": {
 				Success: 4,
 				Failure: 4,
 			},
 		},
 		fakeDay1: {
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+			"test_956d67d3ea93cbfe18a": {
 				Success: 3,
 				Failure: 3,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+			"test_6b2faf2e3b061651297": {
 				Success: 3,
 				Failure: 3,
 			},
 		},
 	}
 
-	source2 := map[time.Time]map[string]api.RelayCounts{
+	source2 := map[time.Time]map[types.PortalAppID]api.RelayCounts{
 		fakeDay3: {
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+			"test_adf93ee1bbb6d617c98": {
 				Success: 3,
 				Failure: 3,
 			},
 		},
 		fakeDay2: {
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+			"test_adf93ee1bbb6d617c98": {
 				Success: 4,
 				Failure: 4,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+			"test_956d67d3ea93cbfe18a": {
 				Success: 4,
 				Failure: 4,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+			"test_4711afda9f2ec4d3165": {
 				Success: 4,
 				Failure: 4,
 			},
 		},
 		fakeDay1: {
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+			"test_adf93ee1bbb6d617c98": {
 				Success: 3,
 				Failure: 3,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+			"test_4711afda9f2ec4d3165": {
 				Success: 3,
 				Failure: 3,
 			},
 		},
 	}
 
-	expectedSource := map[time.Time]map[string]api.RelayCounts{
+	expectedSource := map[time.Time]map[types.PortalAppID]api.RelayCounts{
 		fakeDay3: {
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+			"test_adf93ee1bbb6d617c98": {
 				Success: 3,
 				Failure: 3,
 			},
 		},
 		fakeDay2: {
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+			"test_956d67d3ea93cbfe18a": {
 				Success: 8,
 				Failure: 8,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+			"test_6b2faf2e3b061651297": {
 				Success: 4,
 				Failure: 4,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+			"test_adf93ee1bbb6d617c98": {
 				Success: 4,
 				Failure: 4,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+			"test_4711afda9f2ec4d3165": {
 				Success: 4,
 				Failure: 4,
 			},
 		},
 		fakeDay1: {
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+			"test_956d67d3ea93cbfe18a": {
 				Success: 3,
 				Failure: 3,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+			"test_6b2faf2e3b061651297": {
 				Success: 3,
 				Failure: 3,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a7": { // pragma: allowlist secret
+			"test_adf93ee1bbb6d617c98": {
 				Success: 3,
 				Failure: 3,
 			},
-			"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+			"test_4711afda9f2ec4d3165": {
 				Success: 3,
 				Failure: 3,
 			},
 		},
 	}
 
-	source := mergeTimeRelayCountsMaps([]map[time.Time]map[string]api.RelayCounts{source1, source2})
+	source := mergeTimeRelayCountsMaps([]map[time.Time]map[types.PortalAppID]api.RelayCounts{source1, source2})
 
 	if !cmp.Equal(source, expectedSource) {
 		t.Errorf("Wrong object received, got=%s", cmp.Diff(expectedSource, source))
@@ -125,14 +126,14 @@ func TestMergeLatencies(t *testing.T) {
 	fakeDay1 := time.Date(2022, time.July, 20, 0, 0, 0, 0, &time.Location{})
 	fakeDay2 := fakeDay1.AddDate(0, 0, 1)
 
-	source1 := map[string][]api.Latency{
-		"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+	source1 := map[types.PortalAppID][]api.Latency{
+		"test_956d67d3ea93cbfe18a": {
 			{
 				Time:    fakeDay1,
 				Latency: 21.07,
 			},
 		},
-		"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+		"test_6b2faf2e3b061651297": {
 			{
 				Time:    fakeDay2,
 				Latency: 21.07,
@@ -140,14 +141,14 @@ func TestMergeLatencies(t *testing.T) {
 		},
 	}
 
-	source2 := map[string][]api.Latency{
-		"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+	source2 := map[types.PortalAppID][]api.Latency{
+		"test_956d67d3ea93cbfe18a": {
 			{
 				Time:    fakeDay2,
 				Latency: 21.07,
 			},
 		},
-		"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+		"test_4711afda9f2ec4d3165": {
 			{
 				Time:    fakeDay2,
 				Latency: 21.07,
@@ -155,8 +156,8 @@ func TestMergeLatencies(t *testing.T) {
 		},
 	}
 
-	expectedSource := map[string][]api.Latency{
-		"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a8": { // pragma: allowlist secret
+	expectedSource := map[types.PortalAppID][]api.Latency{
+		"test_956d67d3ea93cbfe18a": {
 			{
 				Time:    fakeDay1,
 				Latency: 21.07,
@@ -166,13 +167,13 @@ func TestMergeLatencies(t *testing.T) {
 				Latency: 21.07,
 			},
 		},
-		"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a6": { // pragma: allowlist secret
+		"test_4711afda9f2ec4d3165": {
 			{
 				Time:    fakeDay2,
 				Latency: 21.07,
 			},
 		},
-		"2585504a028b138b4b535d2351bc45260a3de9cd66305a854049d1a5143392a9": { // pragma: allowlist secret
+		"test_6b2faf2e3b061651297": {
 			{
 				Time:    fakeDay2,
 				Latency: 21.07,
@@ -180,7 +181,7 @@ func TestMergeLatencies(t *testing.T) {
 		},
 	}
 
-	source := mergeLatencyMaps([]map[string][]api.Latency{source1, source2})
+	source := mergeLatencyMaps([]map[types.PortalAppID][]api.Latency{source1, source2})
 
 	if !cmp.Equal(source, expectedSource) {
 		t.Errorf("Wrong object received, got=%s", cmp.Diff(expectedSource, source))

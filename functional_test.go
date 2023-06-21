@@ -48,12 +48,12 @@ func Test_RunSuite_Functional(t *testing.T) {
 }
 
 func (ts *RelayMeterFunctionalTestSuite) Test_TodayAllRelayApps() {
-	allAppsRelays, err := get[[]api.AppRelaysResponse](ts.options.relayMeterURL, "v1/relays/apps", "", ts.todayDate, ts.options.relayMeterAPIKey, ts.httpClient)
+	allPortalAppsRelays, err := get[[]api.PortalAppRelaysResponse](ts.options.relayMeterURL, "v1/relays/portal_apps", "", ts.todayDate, ts.options.relayMeterAPIKey, ts.httpClient)
 	ts.NoError(err)
 
 	allZero := true
 
-	for _, result := range allAppsRelays {
+	for _, result := range allPortalAppsRelays {
 		if (result.Count.Failure + result.Count.Success) > 0 {
 			allZero = false
 			break
@@ -64,12 +64,12 @@ func (ts *RelayMeterFunctionalTestSuite) Test_TodayAllRelayApps() {
 }
 
 func (ts *RelayMeterFunctionalTestSuite) Test_YesterdayAllRelayApps() {
-	allAppsRelays, err := get[[]api.AppRelaysResponse](ts.options.relayMeterURL, "v1/relays/apps", "", ts.yesterdayDate, ts.options.relayMeterAPIKey, ts.httpClient)
+	allPortalAppsRelays, err := get[[]api.PortalAppRelaysResponse](ts.options.relayMeterURL, "v1/relays/portal_apps", "", ts.yesterdayDate, ts.options.relayMeterAPIKey, ts.httpClient)
 	ts.NoError(err)
 
 	allZero := true
 
-	for _, result := range allAppsRelays {
+	for _, result := range allPortalAppsRelays {
 		if (result.Count.Failure + result.Count.Success) > 0 {
 			allZero = false
 			break
