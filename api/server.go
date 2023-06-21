@@ -46,6 +46,14 @@ type ErrorResponse struct {
 	Message string
 }
 
+func healthCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, err := w.Write([]byte("Relay Meter is up and running!"))
+	if err != nil {
+		panic(err)
+	}
+}
+
 func handleAppRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.AppRelays(ctx, app, from, to)
@@ -252,6 +260,11 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 		}
 
 		if req.Method == http.MethodGet {
+			if req.URL.Path == "/" {
+				healthCheck(w, req)
+				return
+			}
+
 			if appID := match(appsRelaysPath, req.URL.Path); appID != "" {
 				handleAppRelays(ctx, meter, l, appID, w, req)
 				return
