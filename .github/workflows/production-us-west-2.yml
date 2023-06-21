@@ -2,10 +2,8 @@ name: Production deployment us-west-2
 
 on:
   workflow_run:
-    workflows: ["Lint & Test"]
-    branches: [main]
-    types:
-      - completed
+    branches: 
+      - main
   workflow_dispatch:
 
 jobs:
