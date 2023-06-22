@@ -5,12 +5,16 @@ package db
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 
 	"database/sql"
 
+	"cloud.google.com/go/cloudsqlconn"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/utils-go/numbers"
 
@@ -47,10 +51,11 @@ type Writer interface {
 }
 
 type PostgresOptions struct {
-	Host     string
-	User     string
-	Password string
-	DB       string
+	Host       string
+	User       string
+	Password   string
+	DB         string
+	UsePrivate bool
 }
 
 type PostgresClient interface {
@@ -58,15 +63,36 @@ type PostgresClient interface {
 	Writer
 }
 
-func NewPostgresClient(options PostgresOptions) (PostgresClient, error) {
-	// TODO: add '?sslmode=verify-full' to connection string?
-	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", options.User, options.Password, options.Host, options.DB)
-
-	db, err := sql.Open("postgres", connStr)
+// DO NOT use as a direct path to the db
+//
+// use NewPostgresClientFromDBInstance right after
+func NewDBConnection(options PostgresOptions) (*sql.DB, error) {
+	dbDetails := fmt.Sprintf("user=%s password=%s database=%s", options.User, options.Password, options.DB)
+	config, err := pgx.ParseConfig(dbDetails)
 	if err != nil {
 		return nil, err
 	}
-	return &pgClient{DB: db}, nil
+
+	var opts []cloudsqlconn.Option
+	if options.UsePrivate {
+		opts = append(opts, cloudsqlconn.WithDefaultDialOptions(cloudsqlconn.WithPrivateIP()))
+	}
+
+	dialer, err := cloudsqlconn.NewDialer(context.Background(), opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	config.DialFunc = func(ctx context.Context, network, instance string) (net.Conn, error) {
+		return dialer.Dial(ctx, options.Host)
+	}
+
+	dbURI := stdlib.RegisterConnConfig(config)
+	dbPool, err := sql.Open("pgx", dbURI)
+	if err != nil {
+		return nil, fmt.Errorf("sql.Open: %v", err)
+	}
+	return dbPool, nil
 }
 
 func NewPostgresClientFromDBInstance(db *sql.DB) PostgresClient {
