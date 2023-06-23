@@ -5,7 +5,6 @@ package db
 import (
 	"context"
 	"fmt"
-	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -13,8 +12,7 @@ import (
 	"database/sql"
 
 	"cloud.google.com/go/cloudsqlconn"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/stdlib"
+	"cloud.google.com/go/cloudsqlconn/postgres/pgxv4"
 	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/utils-go/numbers"
 
@@ -66,33 +64,33 @@ type PostgresClient interface {
 // DO NOT use as a direct path to the db
 //
 // use NewPostgresClientFromDBInstance right after
-func NewDBConnection(options PostgresOptions) (*sql.DB, error) {
-	dbDetails := fmt.Sprintf("user=%s password=%s database=%s", options.User, options.Password, options.DB)
-	config, err := pgx.ParseConfig(dbDetails)
+func NewDBConnection(options PostgresOptions) (*sql.DB, func() error, error) {
+	var db *sql.DB
+	connectionDetails := ""
+
+	// Used for local testing
+	if !options.UsePrivate {
+		connectionDetails = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", options.User, options.Password, options.Host, options.DB)
+		db, err := sql.Open("postgres", connectionDetails)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return db, nil, nil
+	}
+
+	cleanup, err := pgxv4.RegisterDriver("cloudsql-postgres", cloudsqlconn.WithIAMAuthN())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	var opts []cloudsqlconn.Option
-	if options.UsePrivate {
-		opts = append(opts, cloudsqlconn.WithDefaultDialOptions(cloudsqlconn.WithPrivateIP()))
-	}
-
-	dialer, err := cloudsqlconn.NewDialer(context.Background(), opts...)
+	connectionDetails = fmt.Sprintf("host=%s user=%s dbname=%s sslmode=disable", options.Host, options.User, options.DB)
+	db, err = sql.Open("cloudsql-postgres", connectionDetails)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	config.DialFunc = func(ctx context.Context, network, instance string) (net.Conn, error) {
-		return dialer.Dial(ctx, options.Host)
-	}
-
-	dbURI := stdlib.RegisterConnConfig(config)
-	dbPool, err := sql.Open("pgx", dbURI)
-	if err != nil {
-		return nil, fmt.Errorf("sql.Open: %v", err)
-	}
-	return dbPool, nil
+	return db, cleanup, nil
 }
 
 func NewPostgresClientFromDBInstance(db *sql.DB) PostgresClient {

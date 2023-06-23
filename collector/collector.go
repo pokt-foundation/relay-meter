@@ -9,6 +9,7 @@ import (
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/pokt-foundation/relay-meter/api"
+	"github.com/pokt-foundation/utils-go/environment"
 )
 
 const (
@@ -89,8 +90,14 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 
 	counts := mergeTimeRelayCountsMaps(sourcesCounts)
 
-	// TODO: Add counts per origins
-	return c.Writer.WriteDailyUsage(counts, nil)
+	// TODO: remove after migration
+	enableWrites := environment.GetBool("ENABLE_WRITES", false)
+	if enableWrites {
+		// TODO: Add counts per origins
+		return c.Writer.WriteDailyUsage(counts, nil)
+	}
+
+	return nil
 }
 
 func (c *collector) collectTodaysUsage() error {
@@ -124,7 +131,12 @@ func (c *collector) collectTodaysUsage() error {
 	todaysRelaysInOrigin := mergeRelayCountsMaps(sourcesTodaysRelaysInOrigin)
 	todaysLatency := mergeLatencyMaps(sourcesTodaysLatency)
 
-	return c.Writer.WriteTodaysMetrics(todaysCounts, todaysRelaysInOrigin, todaysLatency)
+	// TODO: remove after migration
+	enableWrites := environment.GetBool("ENABLE_WRITES", false)
+	if enableWrites {
+		return c.Writer.WriteTodaysMetrics(todaysCounts, todaysRelaysInOrigin, todaysLatency)
+	}
+	return nil
 }
 
 func (c *collector) collect() error {
