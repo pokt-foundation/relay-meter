@@ -93,8 +93,8 @@ func TestCollect(t *testing.T) {
 					t.Errorf("Expected 'to': %v, got: %v", tc.expectedTo, source.requestedTo)
 				}
 			}
-			//TODO: enable again after GCP deploy
-			/* if writer.todaysWrites != 1 {
+
+			if writer.todaysWrites != 1 {
 				t.Fatalf("Expected 1 write of todays metrics, got: %d", writer.todaysWrites)
 			}
 
@@ -104,7 +104,7 @@ func TestCollect(t *testing.T) {
 
 			if !tc.shouldCollectDaily {
 				return
-			} */
+			}
 		})
 	}
 }
