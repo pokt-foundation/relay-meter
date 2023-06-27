@@ -27,6 +27,8 @@ const (
 	tableDailySums = "daily_app_sums"
 )
 
+var ()
+
 // Will be implemented by Postgres DB interface
 type Reporter interface {
 	// DailyUsage returns saved daily metrics for the specified time period, with each day being an entry in the results map
@@ -49,11 +51,11 @@ type Writer interface {
 }
 
 type PostgresOptions struct {
-	Host       string
-	User       string
-	Password   string
-	DB         string
-	UsePrivate bool
+	Host                      string
+	User                      string
+	Password                  string
+	DB                        string
+	UsePrivate, EnableWriting bool
 }
 
 type PostgresClient interface {
