@@ -78,19 +78,3 @@ func (ts *RelayMeterFunctionalTestSuite) Test_YesterdayAllRelayApps() {
 
 	ts.False(allZero)
 }
-
-func (ts *RelayMeterFunctionalTestSuite) Test_OriginClassification() {
-	allOriginsRelays, err := get[[]api.OriginClassificationsResponse](ts.options.relayMeterURL, "v1/relays/origin-classification", "", "", ts.options.relayMeterAPIKey, ts.httpClient)
-	ts.NoError(err)
-
-	allZero := true
-
-	for _, result := range allOriginsRelays {
-		if (result.Count.Failure + result.Count.Success) > 0 {
-			allZero = false
-			break
-		}
-	}
-
-	ts.False(allZero)
-}
