@@ -52,9 +52,8 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Run Unit tests
-        with:
-          environment-variables: |
-            ENABLE_WRITING= ${{ secrets.ENABLE_WRITING }}
+        env:
+          ENABLE_WRITING: ${{ secrets.ENABLE_WRITING }}
         run: go test ./...  -short
 
       - name: Run Driver tests
