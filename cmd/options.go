@@ -14,16 +14,16 @@ const (
 	INFLUXDB_ORIGIN_BUCKET_DAILY   = "INFLUXDB_ORIGIN_BUCKET_DAILY"
 	INFLUXDB_ORIGIN_BUCKET_CURRENT = "INFLUXDB_ORIGIN_BUCKET_CURRENT"
 
-	POSTGRES_USER     = "POSTGRES_USER"
-	POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
-	POSTGRES_HOST     = "POSTGRES_HOST"
-	POSTGRES_DB       = "POSTGRES_DB"
-)
+	POSTGRES_USER        = "POSTGRES_USER"
+	POSTGRES_PASSWORD    = "POSTGRES_PASSWORD"
+	POSTGRES_HOST        = "POSTGRES_HOST"
+	POSTGRES_DB          = "POSTGRES_DB"
+	POSTGRES_USE_PRIVATE = "POSTGRES_USE_PRIVATE"
+	ENABLE_WRITING       = "ENABLE_WRITING"
 
-type options struct {
-	db.InfluxDBOptions
-	db.PostgresOptions
-}
+	TrueStringChar  = "y"
+	FalseStringChar = "n"
+)
 
 func GatherInfluxOptions() db.InfluxDBOptions {
 	return db.InfluxDBOptions{
@@ -38,10 +38,15 @@ func GatherInfluxOptions() db.InfluxDBOptions {
 }
 
 func GatherPostgresOptions() db.PostgresOptions {
+	usePrivate := environment.GetString(POSTGRES_USE_PRIVATE, FalseStringChar)
+	enableWriting := environment.GetString(ENABLE_WRITING, FalseStringChar)
+
 	return db.PostgresOptions{
-		User:     environment.MustGetString(POSTGRES_USER),
-		Password: environment.MustGetString(POSTGRES_PASSWORD),
-		Host:     environment.MustGetString(POSTGRES_HOST),
-		DB:       environment.MustGetString(POSTGRES_DB),
+		User:          environment.MustGetString(POSTGRES_USER),
+		Password:      environment.MustGetString(POSTGRES_PASSWORD),
+		Host:          environment.MustGetString(POSTGRES_HOST),
+		DB:            environment.MustGetString(POSTGRES_DB),
+		UsePrivate:    usePrivate == TrueStringChar,
+		EnableWriting: enableWriting == TrueStringChar,
 	}
 }

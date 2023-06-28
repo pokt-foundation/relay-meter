@@ -11,6 +11,8 @@ import (
 
 	"database/sql"
 
+	"cloud.google.com/go/cloudsqlconn"
+	"cloud.google.com/go/cloudsqlconn/postgres/pgxv4"
 	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/utils-go/numbers"
 
@@ -24,6 +26,8 @@ const (
 	dayLayout      = "2006-01-02"
 	tableDailySums = "daily_app_sums"
 )
+
+var ()
 
 // Will be implemented by Postgres DB interface
 type Reporter interface {
@@ -47,10 +51,11 @@ type Writer interface {
 }
 
 type PostgresOptions struct {
-	Host     string
-	User     string
-	Password string
-	DB       string
+	Host                      string
+	User                      string
+	Password                  string
+	DB                        string
+	UsePrivate, EnableWriting bool
 }
 
 type PostgresClient interface {
@@ -58,15 +63,36 @@ type PostgresClient interface {
 	Writer
 }
 
-func NewPostgresClient(options PostgresOptions) (PostgresClient, error) {
-	// TODO: add '?sslmode=verify-full' to connection string?
-	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", options.User, options.Password, options.Host, options.DB)
+// DO NOT use as a direct path to the db
+//
+// use NewPostgresClientFromDBInstance right after
+func NewDBConnection(options PostgresOptions) (*sql.DB, func() error, error) {
+	var db *sql.DB
+	connectionDetails := ""
 
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		return nil, err
+	// Used for local testing
+	if !options.UsePrivate {
+		connectionDetails = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", options.User, options.Password, options.Host, options.DB)
+		db, err := sql.Open("postgres", connectionDetails)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return db, nil, nil
 	}
-	return &pgClient{DB: db}, nil
+
+	cleanup, err := pgxv4.RegisterDriver("cloudsql-postgres", cloudsqlconn.WithIAMAuthN())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	connectionDetails = fmt.Sprintf("host=%s user=%s dbname=%s sslmode=disable", options.Host, options.User, options.DB)
+	db, err = sql.Open("cloudsql-postgres", connectionDetails)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return db, cleanup, nil
 }
 
 func NewPostgresClientFromDBInstance(db *sql.DB) PostgresClient {

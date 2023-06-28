@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"time"
@@ -47,12 +46,17 @@ func main() {
 
 	influxClient := db.NewInfluxDBSource(influxOptions)
 
-	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", postgresOptions.User, postgresOptions.Password, postgresOptions.Host, postgresOptions.DB)
-	dbInst, err := sql.Open("postgres", connStr)
+	dbInst, cleanup, err := db.NewDBConnection(postgresOptions)
 	if err != nil {
-		fmt.Printf("Error setting up Postgres client: %v\n", err)
+		fmt.Printf("Error setting up Postgres connection: %v\n", err)
 		os.Exit(1)
 	}
+	defer func() {
+		err := cleanup()
+		if err != nil {
+			fmt.Printf("Error during cleanup: %v\n", err)
+		}
+	}()
 
 	pgClient := db.NewPostgresClientFromDBInstance(dbInst)
 	driver := driver.NewPostgresDriverFromDBInstance(dbInst)

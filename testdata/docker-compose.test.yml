@@ -22,6 +22,8 @@ services:
       POSTGRES_HOST: relay-meter-db:5434
       MAX_ARCHIVE_AGE: 60
       COLLECTION_INTERVAL_SECONDS: 10
+      POSTGRES_USE_PRIVATE: "n"
+      ENABLE_WRITING: "y"
     depends_on:
       influxdb:
         condition: service_healthy
@@ -48,6 +50,8 @@ services:
       POSTGRES_HOST: relay-meter-db:5434
       BACKEND_API_URL: http://pocket-http-db:8090
       BACKEND_API_TOKEN: test_api_key_6789
+      POSTGRES_USE_PRIVATE: "n"
+      ENABLE_WRITING: "y"
     depends_on:
       influxdb:
         condition: service_healthy
