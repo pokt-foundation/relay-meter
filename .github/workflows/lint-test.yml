@@ -6,6 +6,9 @@ on:
       - main
       - staging
 
+env:
+  ENABLE_WRITING: ${{secrets.ENABLE_WRITING}}
+
 jobs:
   # TODO Put Lint step back once golangci-lint changes addressed in separate PR
   # lint:
