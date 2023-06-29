@@ -29,7 +29,7 @@ func (d *PostgresDriver) WriteHTTPSourceRelayCounts(ctx context.Context, counts 
 	)
 
 	for _, count := range counts {
-		appPublicKeys = append(appPublicKeys, count.AppPublicKey)
+		appPublicKeys = append(appPublicKeys, string(count.AppPublicKey))
 		days = append(days, truncateToDay(count.Day))
 		successes = append(successes, count.Success)
 		errors = append(errors, count.Error)

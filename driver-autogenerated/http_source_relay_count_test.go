@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
 )
 
@@ -63,7 +64,7 @@ func (ts *PGDriverTestSuite) TestPostgresDriver_HTTPSourceRelayCount() {
 		ts.Equal(err, tt.err)
 
 		// need to convert to map to be able to assert the results
-		countsMap := make(map[string]api.HTTPSourceRelayCount, len(counts))
+		countsMap := make(map[types.PortalAppPublicKey]api.HTTPSourceRelayCount, len(counts))
 		for _, count := range counts {
 			countsMap[count.AppPublicKey] = count
 		}

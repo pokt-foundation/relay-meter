@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pokt-foundation/portal-db/v2/types"
 	logger "github.com/sirupsen/logrus"
 )
 
@@ -57,9 +58,9 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleAppRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
+func handleAppRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, appPubKey types.PortalAppPublicKey, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AppRelays(ctx, app, from, to)
+		return meter.AppRelays(ctx, appPubKey, from, to)
 	}
 	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
@@ -71,23 +72,23 @@ func handleAllAppsRelays(ctx context.Context, meter RelayMeter, l *logger.Logger
 	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleUserRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, user string, w http.ResponseWriter, req *http.Request) {
+func handleUserRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, userID types.UserID, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.UserRelays(ctx, user, from, to)
+		return meter.UserRelays(ctx, userID, from, to)
 	}
 	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleLoadBalancerRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, endpoint string, w http.ResponseWriter, req *http.Request) {
+func handlePortalAppRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, portalAppID types.PortalAppID, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.LoadBalancerRelays(ctx, endpoint, from, to)
+		return meter.PortalAppRelays(ctx, portalAppID, from, to)
 	}
 	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleAllLoadBalancersRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
+func handleAllPortalAppsRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AllLoadBalancersRelays(ctx, from, to)
+		return meter.AllPortalAppsRelays(ctx, from, to)
 	}
 	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
@@ -99,7 +100,7 @@ func handleTotalRelays(ctx context.Context, meter RelayMeter, l *logger.Logger, 
 	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleSpecificOriginClassification(ctx context.Context, meter RelayMeter, l *logger.Logger, origin string, w http.ResponseWriter, req *http.Request) {
+func handleSpecificOriginClassification(ctx context.Context, meter RelayMeter, l *logger.Logger, origin types.PortalAppOrigin, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
 		return meter.RelaysOrigin(ctx, origin, from, to)
 	}
@@ -113,9 +114,9 @@ func handleOriginClassification(ctx context.Context, meter RelayMeter, l *logger
 	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
 
-func handleAppLatency(ctx context.Context, meter RelayMeter, l *logger.Logger, app string, w http.ResponseWriter, req *http.Request) {
+func handleAppLatency(ctx context.Context, meter RelayMeter, l *logger.Logger, appPubKey types.PortalAppPublicKey, w http.ResponseWriter, req *http.Request) {
 	meterEndpoint := func(from, to time.Time) (any, error) {
-		return meter.AppLatency(ctx, app)
+		return meter.AppLatency(ctx, appPubKey)
 	}
 	handleEndpoint(ctx, l, meterEndpoint, w, req)
 }
@@ -189,7 +190,7 @@ func handleEndpoint(ctx context.Context, l *logger.Logger, meterEndpoint func(fr
 		case meterErr != nil && errors.Is(meterErr, AppNotFound):
 			errLogger.Warn("Invalid request: application not found")
 			http.Error(w, fmt.Sprintf("Bad request: %v", meterErr), http.StatusBadRequest)
-		case meterErr != nil && errors.Is(meterErr, ErrLoadBalancerNotFound):
+		case meterErr != nil && errors.Is(meterErr, ErrPortalAppNotFound):
 			errLogger.Warn("Invalid request: load balancer not found")
 			http.Error(w, fmt.Sprintf("Bad request: %v", meterErr), http.StatusNotFound)
 		default:
@@ -273,23 +274,23 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 				return
 			}
 
-			if appID := match(appsRelaysPath, req.URL.Path); appID != "" {
-				handleAppRelays(ctx, meter, l, appID, w, req)
+			if appPubKey := match(appsRelaysPath, req.URL.Path); appPubKey != "" {
+				handleAppRelays(ctx, meter, l, types.PortalAppPublicKey(appPubKey), w, req)
 				return
 			}
 
 			if userID := match(usersRelaysPath, req.URL.Path); userID != "" {
-				handleUserRelays(ctx, meter, l, userID, w, req)
+				handleUserRelays(ctx, meter, l, types.UserID(userID), w, req)
 				return
 			}
 
-			if lbID := match(lbRelaysPath, req.URL.Path); lbID != "" {
-				handleLoadBalancerRelays(ctx, meter, l, lbID, w, req)
+			if portalAppID := match(lbRelaysPath, req.URL.Path); portalAppID != "" {
+				handlePortalAppRelays(ctx, meter, l, types.PortalAppID(portalAppID), w, req)
 				return
 			}
 
-			if appID := match(appsLatencyPath, req.URL.Path); appID != "" {
-				handleAppLatency(ctx, meter, l, appID, w, req)
+			if appPubKey := match(appsLatencyPath, req.URL.Path); appPubKey != "" {
+				handleAppLatency(ctx, meter, l, types.PortalAppPublicKey(appPubKey), w, req)
 				return
 			}
 
@@ -299,12 +300,12 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 			}
 
 			if allLbsRelaysPath.Match([]byte(req.URL.Path)) {
-				handleAllLoadBalancersRelays(ctx, meter, l, w, req)
+				handleAllPortalAppsRelays(ctx, meter, l, w, req)
 				return
 			}
 
 			if origin := match(specificOriginUsagePath, req.URL.Path); origin != "" {
-				handleSpecificOriginClassification(ctx, meter, l, origin, w, req)
+				handleSpecificOriginClassification(ctx, meter, l, types.PortalAppOrigin(origin), w, req)
 				return
 			}
 

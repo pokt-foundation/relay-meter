@@ -1,8 +1,4 @@
 version: "2"
-overrides:
-  go:
-    rename:
-      price_usd: "PriceUSD"
 
 sql:
   - schema: "schema.sql"
@@ -18,3 +14,20 @@ sql:
         output_models_file_name: models.generated.go
         output_querier_file_name: querier.generated.go
         output_files_suffix: .generated
+        overrides:
+          - column: "relay_counts.origin"
+            go_type: "github.com/pokt-foundation/portal-db/v2/types.PortalAppOrigin"
+          - column: "relay_counts.application"
+            go_type: "github.com/pokt-foundation/portal-db/v2/types.PortalAppPublicKey"
+          - column: "todays_relay_counts.origin"
+            go_type: "github.com/pokt-foundation/portal-db/v2/types.PortalAppOrigin"
+          - column: "todays_relay_counts.application"
+            go_type: "github.com/pokt-foundation/portal-db/v2/types.PortalAppPublicKey"
+          - column: "daily_app_sums.application"
+            go_type: "github.com/pokt-foundation/portal-db/v2/types.PortalAppPublicKey"
+          - column: "todays_app_sums.application"
+            go_type: "github.com/pokt-foundation/portal-db/v2/types.PortalAppPublicKey"
+          - column: "todays_app_latencies.application"
+            go_type: "github.com/pokt-foundation/portal-db/v2/types.PortalAppPublicKey"
+          - column: "http_source_relay_count.app_public_key"
+            go_type: "github.com/pokt-foundation/portal-db/v2/types.PortalAppPublicKey"
