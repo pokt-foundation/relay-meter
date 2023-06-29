@@ -9,8 +9,8 @@ import (
 
 	logger "github.com/sirupsen/logrus"
 
-	phdClient "github.com/pokt-foundation/db-client/client"
-	"github.com/pokt-foundation/portal-db/types"
+	phdClient "github.com/pokt-foundation/db-client/v2/client"
+	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/utils-go/environment"
 
 	// TODO: replace with pokt-foundation/relay-meter
@@ -77,28 +77,30 @@ type backendProvider struct {
 	phd phdClient.IDBReader
 }
 
-func (p *backendProvider) UserApps(ctx context.Context, user string) ([]string, error) {
-	userApps, err := p.phd.GetApplicationsByUserID(ctx, user)
+func (p *backendProvider) UserPortalAppPubKeys(ctx context.Context, userID types.UserID) ([]types.PortalAppPublicKey, error) {
+	userPortalApps, err := p.phd.GetPortalAppsByUser(ctx, userID, types.RoleOwner)
 	if err != nil {
 		return nil, err
 	}
 
-	var applications []string
-	for _, app := range userApps {
-		if app.GatewayAAT.ApplicationPublicKey != "" {
-			applications = append(applications, app.GatewayAAT.ApplicationPublicKey)
+	var appPubKeys []types.PortalAppPublicKey
+	for _, app := range userPortalApps {
+		for _, aat := range app.AATs {
+			if aat.PublicKey != "" {
+				appPubKeys = append(appPubKeys, aat.PublicKey)
+			}
 		}
 	}
 
-	return applications, nil
+	return appPubKeys, nil
 }
 
-func (p *backendProvider) LoadBalancer(ctx context.Context, endpoint string) (*types.LoadBalancer, error) {
-	return p.phd.GetLoadBalancerByID(ctx, endpoint)
+func (p *backendProvider) PortalApp(ctx context.Context, portalAppID types.PortalAppID) (*types.PortalApp, error) {
+	return p.phd.GetPortalAppByID(ctx, portalAppID)
 }
 
-func (p *backendProvider) LoadBalancers(ctx context.Context) ([]*types.LoadBalancer, error) {
-	return p.phd.GetLoadBalancers(ctx)
+func (p *backendProvider) PortalApps(ctx context.Context) ([]*types.PortalApp, error) {
+	return p.phd.GetAllPortalApps(ctx)
 }
 
 // TODO: need a /health endpoint
@@ -140,7 +142,6 @@ func main() {
 	phdClient, err := phdClient.NewReadOnlyDBClient(phdClient.Config{
 		BaseURL: options.phdBaseURL,
 		APIKey:  options.phdAPIKey,
-		Version: phdClient.V1,
 		Retries: options.retries,
 		Timeout: options.timeout,
 	})

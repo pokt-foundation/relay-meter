@@ -8,6 +8,7 @@ import (
 
 	logger "github.com/sirupsen/logrus"
 
+	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/relay-meter/cmd"
 	"github.com/pokt-foundation/utils-go/environment"
@@ -19,10 +20,10 @@ const (
 )
 
 type Source interface {
-	DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error)
-	TodaysCounts() (map[string]api.RelayCounts, error)
-	TodaysCountsPerOrigin() (map[string]api.RelayCounts, error)
-	TodaysLatency() (map[string][]api.Latency, error)
+	DailyCounts(from time.Time, to time.Time) (map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts, error)
+	TodaysCounts() (map[types.PortalAppPublicKey]api.RelayCounts, error)
+	TodaysCountsPerOrigin() (map[types.PortalAppOrigin]api.RelayCounts, error)
+	TodaysLatency() (map[types.PortalAppPublicKey][]api.Latency, error)
 	Name() string
 }
 
@@ -32,9 +33,9 @@ type Writer interface {
 	//	It is assumed that there are no gaps in the returned time period.
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
 	// TODO: allow overwriting today's metrics
-	WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error
-	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
-	WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
+	WriteTodaysMetrics(counts map[types.PortalAppPublicKey]api.RelayCounts, countsOrigin map[types.PortalAppOrigin]api.RelayCounts, latencies map[types.PortalAppPublicKey][]api.Latency) error
+	WriteDailyUsage(counts map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts, countsOrigin map[types.PortalAppOrigin]api.RelayCounts) error
+	WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[types.PortalAppPublicKey]api.RelayCounts, countsOrigin map[types.PortalAppOrigin]api.RelayCounts) error
 }
 
 type Collector interface {
@@ -78,7 +79,7 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 	}
 	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Daily metrics collection period adjusted.")
 
-	var sourcesCounts []map[time.Time]map[string]api.RelayCounts
+	var sourcesCounts []map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts
 
 	for _, source := range c.Sources {
 		sourceCounts, err := source.DailyCounts(from, to)
@@ -102,8 +103,9 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 }
 
 func (c *collector) collectTodaysUsage() error {
-	var sourcesTodaysCounts, sourcesTodaysRelaysInOrigin []map[string]api.RelayCounts
-	var sourcesTodaysLatency []map[string][]api.Latency
+	var sourcesTodaysCounts []map[types.PortalAppPublicKey]api.RelayCounts
+	var sourcesTodaysRelaysInOrigin []map[types.PortalAppOrigin]api.RelayCounts
+	var sourcesTodaysLatency []map[types.PortalAppPublicKey][]api.Latency
 
 	for _, source := range c.Sources {
 		sourceTodaysCounts, err := source.TodaysCounts()
@@ -129,7 +131,7 @@ func (c *collector) collectTodaysUsage() error {
 	}
 
 	todaysCounts := mergeRelayCountsMaps(sourcesTodaysCounts)
-	todaysRelaysInOrigin := mergeRelayCountsMaps(sourcesTodaysRelaysInOrigin)
+	todaysRelaysInOrigin := mergeRelayCountsMapsByOrigin(sourcesTodaysRelaysInOrigin)
 	todaysLatency := mergeLatencyMaps(sourcesTodaysLatency)
 
 	// TODO: remove after migration
