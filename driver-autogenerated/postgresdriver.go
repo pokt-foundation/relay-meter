@@ -43,7 +43,8 @@ func NewPostgresDriverFromDBInstance(db *sql.DB) *PostgresDriver {
 /* NewPostgresDriverFromDBInstance returns PostgresDriver instance from sdl.DB instance */
 func NewPgxDriverFromDBInstance(conn *pgx.Conn) *PostgresDriver {
 	driver := &PostgresDriver{
-		Conn: conn,
+		Conn:    conn,
+		Queries: NewPGX(*conn),
 	}
 
 	return driver
