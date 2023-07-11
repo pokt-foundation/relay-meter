@@ -5,6 +5,7 @@ import (
 
 	// PQ import is required
 
+	"github.com/jackc/pgx/v5"
 	_ "github.com/lib/pq"
 )
 
@@ -12,6 +13,7 @@ import (
 type PostgresDriver struct {
 	*Queries
 	db *sql.DB
+	*pgx.Conn
 }
 
 /* NewPostgresDriver returns PostgresDriver instance from Postgres connection string */
@@ -33,6 +35,15 @@ func NewPostgresDriver(connectionString string) (*PostgresDriver, error) {
 func NewPostgresDriverFromDBInstance(db *sql.DB) *PostgresDriver {
 	driver := &PostgresDriver{
 		Queries: New(db),
+	}
+
+	return driver
+}
+
+/* NewPostgresDriverFromDBInstance returns PostgresDriver instance from sdl.DB instance */
+func NewPgxDriverFromDBInstance(conn *pgx.Conn) *PostgresDriver {
+	driver := &PostgresDriver{
+		Conn: conn,
 	}
 
 	return driver

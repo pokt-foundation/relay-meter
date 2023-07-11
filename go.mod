@@ -7,7 +7,7 @@ require (
 	github.com/gojektech/heimdall v5.0.2+incompatible
 	github.com/google/go-cmp v0.5.9
 	github.com/influxdata/influxdb-client-go/v2 v2.9.1
-	github.com/jackc/pgx/v4 v4.18.1
+	github.com/jackc/pgx/v5 v5.4.1
 	github.com/lib/pq v1.10.7
 	github.com/pokt-foundation/db-client v1.7.1
 	github.com/pokt-foundation/portal-db v1.10.8
@@ -38,9 +38,11 @@ require (
 	github.com/jackc/pgproto3/v2 v2.3.2 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/pgtype v1.14.0 // indirect
+	github.com/jackc/pgx/v4 v4.18.1 // indirect
 	github.com/joho/godotenv v1.4.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/crypto v0.9.0 // indirect

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	"github.com/pokt-foundation/utils-go/numbers"
-	timeUtils "github.com/pokt-foundation/utils-go/time"
+	/* 	"github.com/pokt-foundation/utils-go/numbers"
+	   	timeUtils "github.com/pokt-foundation/utils-go/time" */
 
 	"github.com/pokt-foundation/relay-meter/api"
 )
@@ -56,7 +56,7 @@ func (*influxDB) Name() string {
 //
 //	Each app will have an entry per day
 func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error) {
-	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
+	/* client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI(i.Options.Org)
 
 	// Loop on days
@@ -124,12 +124,13 @@ func (i *influxDB) DailyCounts(from, to time.Time) (map[time.Time]map[string]api
 	}
 
 	client.Close()
-	return dailyCounts, nil
+	return dailyCounts, nil */
+	return nil, nil
 }
 
 // TODO: Refactor out the parts of the logic common between TodaysCounts and DailyCounts
 func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
-	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
+	/* client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI(i.Options.Org)
 
 	counts := make(map[string]api.RelayCounts)
@@ -186,11 +187,12 @@ func (i *influxDB) TodaysCounts() (map[string]api.RelayCounts, error) {
 	}
 
 	client.Close()
-	return counts, nil
+	return counts, nil */
+	return nil, nil
 }
 
 func (i *influxDB) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error) {
-	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
+	/* client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI(i.Options.Org)
 
 	counts := make(map[string]api.RelayCounts)
@@ -248,13 +250,15 @@ func (i *influxDB) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error) {
 	}
 
 	client.Close()
-	return counts, nil
+	return counts, nil */
+
+	return nil, nil
 }
 
 // Fetches the last 24 hours of latency data from InfluxDB, sorted by applicationPublicKey
 // and broken up into hourly average latency (returned slice will be exactly 24 items)
 func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
-	client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
+	/* client := influxdb2.NewClient(i.Options.URL, i.Options.Token)
 	queryAPI := client.QueryAPI(i.Options.Org)
 
 	latencies := make(map[string][]api.Latency)
@@ -319,7 +323,8 @@ func (i *influxDB) TodaysLatency() (map[string][]api.Latency, error) {
 
 	client.Close()
 
-	return latencies, nil
+	return latencies, nil */
+	return nil, nil
 }
 
 func updateRelayCount(current api.RelayCounts, relayResult string, count int64) (api.RelayCounts, error) {

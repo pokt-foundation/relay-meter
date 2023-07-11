@@ -2,10 +2,10 @@ package collector
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/pokt-foundation/relay-meter/api"
@@ -34,7 +34,7 @@ type Writer interface {
 	// TODO: allow overwriting today's metrics
 	WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error
 	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
-	WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
+	WriteTodaysUsage(ctx context.Context, tx pgx.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 }
 
 type Collector interface {

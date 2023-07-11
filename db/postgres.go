@@ -5,14 +5,13 @@ package db
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 
-	"database/sql"
-
 	"cloud.google.com/go/cloudsqlconn"
-	"cloud.google.com/go/cloudsqlconn/postgres/pgxv4"
+	pgx "github.com/jackc/pgx/v5"
 	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/utils-go/numbers"
 
@@ -44,7 +43,7 @@ type Writer interface {
 	// TODO: rollover of entries
 	WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 	// WriteTodaysUsage writes todays relay counts to the underlying storage.
-	WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
+	WriteTodaysUsage(ctx context.Context, tx pgx.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error
 	WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error
 	// Returns oldest and most recent timestamps for stored metrics
 	ExistingMetricsTimespan() (time.Time, time.Time, error)
@@ -58,6 +57,15 @@ type PostgresOptions struct {
 	UsePrivate, EnableWriting bool
 }
 
+type CloudSQLConfig struct {
+	DBUser                 string
+	DBPassword             string
+	DBName                 string
+	InstanceConnectionName string
+	PublicIP               string
+	PrivateIP              string
+}
+
 type PostgresClient interface {
 	Reporter
 	Writer
@@ -66,42 +74,55 @@ type PostgresClient interface {
 // DO NOT use as a direct path to the db
 //
 // use NewPostgresClientFromDBInstance right after
-func NewDBConnection(options PostgresOptions) (*sql.DB, func() error, error) {
-	var db *sql.DB
+func NewDBConnection(options PostgresOptions) (*pgx.Conn, error) {
 	connectionDetails := ""
+	ctx := context.Background()
 
 	// Used for local testing
 	if !options.UsePrivate {
 		connectionDetails = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", options.User, options.Password, options.Host, options.DB)
-		db, err := sql.Open("postgres", connectionDetails)
+		db, err := pgx.Connect(ctx, connectionDetails)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
-		return db, nil, nil
+		return db, nil
 	}
 
-	cleanup, err := pgxv4.RegisterDriver("cloudsql-postgres", cloudsqlconn.WithIAMAuthN())
+	var opts []cloudsqlconn.Option
+
+	opts = append(opts, cloudsqlconn.WithDefaultDialOptions(cloudsqlconn.WithPrivateIP()))
+
+	connectionDetails = fmt.Sprintf("user=%s dbname=%s", options.User, options.DB)
+	config, err := pgx.ParseConfig(connectionDetails)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	connectionDetails = fmt.Sprintf("host=%s user=%s dbname=%s sslmode=disable", options.Host, options.User, options.DB)
-	db, err = sql.Open("cloudsql-postgres", connectionDetails)
+	dialer, err := cloudsqlconn.NewDialer(ctx, opts...)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return db, cleanup, nil
+	config.DialFunc = func(ctx context.Context, network, instance string) (net.Conn, error) {
+		return dialer.Dial(ctx, options.Host)
+	}
+
+	conn, err := pgx.ConnectConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("pgx.ConnectConfig: %v", err)
+	}
+
+	return conn, nil
 }
 
-func NewPostgresClientFromDBInstance(db *sql.DB) PostgresClient {
-	return &pgClient{DB: db}
+func NewPostgresClientFromDBInstance(db *pgx.Conn) PostgresClient {
+	return &pgClient{Conn: db}
 }
 
 // type pgReporter
 type pgClient struct {
-	*sql.DB
+	*pgx.Conn
 }
 
 func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error) {
@@ -111,7 +132,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 		from.Format(dayLayout),
 		to.Format(dayLayout),
 	)
-	rows, err := p.DB.QueryContext(ctx, q)
+	rows, err := p.Conn.Query(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -164,10 +185,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 		}
 		dailyUsage[ts][app] = api.RelayCounts{Success: countSuccess, Failure: countFailure}
 	}
-	// TODO: verify this is needed
-	if rerr := rows.Close(); rerr != nil {
-		return nil, rerr
-	}
+
 	// Rows.Err will report the last error encountered by Rows.Scan.
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -179,7 +197,7 @@ func (p *pgClient) DailyUsage(from, to time.Time) (map[time.Time]map[string]api.
 func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
-	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	tx, err := p.Conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return err
 	}
@@ -187,11 +205,11 @@ func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCoun
 	// TODO: bulk insert
 	for day, appCounts := range counts {
 		for app, counts := range appCounts {
-			_, execErr := tx.ExecContext(ctx,
+			_, execErr := tx.Exec(ctx,
 				"INSERT INTO daily_app_sums(application, count_success, count_failure, time) VALUES($1, $2, $3, $4);",
 				app, counts.Success, counts.Failure, day)
 			if execErr != nil {
-				if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 					fmt.Printf("update failed err write dailyUsage: %v, unable to rollback: %v\n", execErr, rollbackErr.Error())
 					return execErr
 				}
@@ -200,7 +218,7 @@ func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCoun
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -208,7 +226,7 @@ func (p *pgClient) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCoun
 
 func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	ctx := context.Background()
-	row := p.DB.QueryRowContext(ctx, fmt.Sprintf("SELECT count(*), COALESCE(min(time), '2003-01-02 03:04' ), COALESCE(max(time), '2003-01-02 03:04') FROM %s", tableDailySums))
+	row := p.Conn.QueryRow(ctx, fmt.Sprintf("SELECT count(*), COALESCE(min(time), '2003-01-02 03:04' ), COALESCE(max(time), '2003-01-02 03:04') FROM %s", tableDailySums))
 	var countStr, firstStr, lastStr string
 	var first, last time.Time
 	if err := row.Scan(&countStr, &firstStr, &lastStr); err != nil {
@@ -231,7 +249,7 @@ func (p *pgClient) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
 	ctx := context.Background()
 	// TODO: determine required isolation level
-	tx, err := p.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	tx, err := p.Conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return err
 	}
@@ -246,7 +264,7 @@ func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsO
 		return fmt.Errorf("error writing usage: %s", err.Error())
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 
@@ -256,7 +274,7 @@ func (p *pgClient) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsO
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
 //
 //	All the entries in the table holding todays metrics are deleted first.
-func (p *pgClient) WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
+func (p *pgClient) WriteTodaysUsage(ctx context.Context, tx pgx.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
 	if err := WriteAppUsage(ctx, tx, counts); err != nil {
 		return err
 	}
@@ -268,11 +286,11 @@ func (p *pgClient) WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[
 	return nil
 }
 
-func WriteAppUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts) error {
+func WriteAppUsage(ctx context.Context, tx pgx.Tx, counts map[string]api.RelayCounts) error {
 	// todays_sums table gets rebuilt every time
-	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_app_sums")
+	_, deleteErr := tx.Exec(ctx, "DELETE FROM todays_app_sums")
 	if deleteErr != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 			fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr.Error())
 			return deleteErr
 		}
@@ -280,11 +298,11 @@ func WriteAppUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayC
 
 	// TODO: bulk insert
 	for app, count := range counts {
-		_, execErr := tx.ExecContext(ctx,
+		_, execErr := tx.Exec(ctx,
 			"INSERT INTO todays_app_sums(application, count_success, count_failure) VALUES($1, $2, $3);",
 			app, count.Success, count.Failure)
 		if execErr != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 				fmt.Printf("update failed err writeAppUsage: %v, unable to rollback: %v\n", execErr, rollbackErr.Error())
 				return execErr
 			}
@@ -295,11 +313,11 @@ func WriteAppUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayC
 	return nil
 }
 
-func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts) error {
+func WriteOriginUsage(ctx context.Context, tx pgx.Tx, counts map[string]api.RelayCounts) error {
 	// todays_sums table gets rebuilt every time
-	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_relay_counts")
+	_, deleteErr := tx.Exec(ctx, "DELETE FROM todays_relay_counts")
 	if deleteErr != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 			fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr)
 			return deleteErr
 		}
@@ -307,11 +325,11 @@ func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.Rel
 
 	// TODO: bulk insert
 	for origin, count := range counts {
-		_, execErr := tx.ExecContext(ctx,
+		_, execErr := tx.Exec(ctx,
 			"INSERT INTO todays_relay_counts(origin, count_success, count_failure) VALUES($1, $2, $3);",
 			origin, count.Success, count.Failure)
 		if execErr != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 				fmt.Printf("update failed err write origin usage: %v, unable to rollback: %v\n", execErr, rollbackErr.Error())
 				return execErr
 			}
@@ -325,11 +343,11 @@ func WriteOriginUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.Rel
 // WriteTodaysUsage writes the app metrics for today so far to the underlying PG table.
 //
 //	All the entries in the table holding todays metrics are deleted first.
-func (p *pgClient) writeTodaysLatency(ctx context.Context, tx *sql.Tx, latencies map[string][]api.Latency) error {
+func (p *pgClient) writeTodaysLatency(ctx context.Context, tx pgx.Tx, latencies map[string][]api.Latency) error {
 	// todays_app_latencies table gets rebuilt every time
-	_, deleteErr := tx.ExecContext(ctx, "DELETE FROM todays_app_latencies")
+	_, deleteErr := tx.Exec(ctx, "DELETE FROM todays_app_latencies")
 	if deleteErr != nil {
-		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 			fmt.Printf("delete failed: %v, unable to rollback: %v\n", deleteErr, rollbackErr)
 			return deleteErr
 		}
@@ -338,12 +356,12 @@ func (p *pgClient) writeTodaysLatency(ctx context.Context, tx *sql.Tx, latencies
 	// TODO: bulk insert
 	for app, appLatency := range latencies {
 		for _, appLatency := range appLatency {
-			_, execErr := tx.ExecContext(ctx,
+			_, execErr := tx.Exec(ctx,
 				"INSERT INTO todays_app_latencies(application, time, latency) VALUES($1, $2, $3);",
 				app, appLatency.Time, appLatency.Latency)
 
 			if execErr != nil {
-				if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 					fmt.Printf("update failed err write today latency: %v, unable to rollback: %v\n", execErr, rollbackErr.Error())
 					return execErr
 				}
@@ -359,7 +377,7 @@ func (p *pgClient) writeTodaysLatency(ctx context.Context, tx *sql.Tx, latencies
 func (p *pgClient) TodaysUsage() (map[string]api.RelayCounts, error) {
 	// TODO: factor-out the SQL statements
 	ctx := context.Background()
-	rows, err := p.DB.QueryContext(ctx, "SELECT (application, count_success, count_failure) FROM todays_app_sums")
+	rows, err := p.Conn.Query(ctx, "SELECT (application, count_success, count_failure) FROM todays_app_sums")
 	if err != nil {
 		return nil, err
 	}
@@ -397,10 +415,7 @@ func (p *pgClient) TodaysUsage() (map[string]api.RelayCounts, error) {
 
 		todaysUsage[app] = api.RelayCounts{Success: countSuccess, Failure: countFailure}
 	}
-	// TODO: verify this is needed
-	if rerr := rows.Close(); rerr != nil {
-		return nil, rerr
-	}
+
 	// Rows.Err will report the last error encountered by Rows.Scan.
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -413,7 +428,7 @@ func (p *pgClient) TodaysUsage() (map[string]api.RelayCounts, error) {
 func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 	// TODO: factor-out the SQL statements
 	ctx := context.Background()
-	rows, err := p.DB.QueryContext(ctx, "SELECT (application, time, latency) FROM todays_app_latencies")
+	rows, err := p.Conn.Query(ctx, "SELECT (application, time, latency) FROM todays_app_latencies")
 	if err != nil {
 		return nil, err
 	}
@@ -463,10 +478,7 @@ func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 		todaysLatency[app] = append(todaysLatency[app], latencyByHour)
 
 	}
-	// TODO: verify this is needed
-	if rerr := rows.Close(); rerr != nil {
-		return nil, rerr
-	}
+
 	// Rows.Err will report the last error encountered by Rows.Scan.
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -479,7 +491,7 @@ func (p *pgClient) TodaysLatency() (map[string][]api.Latency, error) {
 func (pg *pgClient) TodaysOriginUsage() (map[string]api.RelayCounts, error) {
 	// TODO: factor-out the SQL statements
 	ctx := context.Background()
-	rows, err := pg.DB.QueryContext(ctx, "SELECT (origin, count_success, count_failure) FROM todays_relay_counts")
+	rows, err := pg.Conn.Query(ctx, "SELECT (origin, count_success, count_failure) FROM todays_relay_counts")
 	if err != nil {
 		return nil, err
 	}
@@ -521,10 +533,7 @@ func (pg *pgClient) TodaysOriginUsage() (map[string]api.RelayCounts, error) {
 			Failure: count_failure,
 		}
 	}
-	// TODO: verify this is needed
-	if rerr := rows.Close(); rerr != nil {
-		return nil, rerr
-	}
+
 	// Rows.Err will report the last error encountered by Rows.Scan.
 	if err := rows.Err(); err != nil {
 		return nil, err

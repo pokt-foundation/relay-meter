@@ -121,20 +121,14 @@ func main() {
 	log.WithFields(logger.Fields{"postgresOptions": postgresOptions, "meterOptions": meterOptions}).Info("Gathered options.")
 
 	/* Init Postgres Client */
-	dbInst, cleanup, err := db.NewDBConnection(postgresOptions)
+	dbInst, err := db.NewDBConnection(postgresOptions)
 	if err != nil {
 		fmt.Printf("Error setting up Postgres connection: %v\n", err)
 		os.Exit(1)
 	}
-	defer func() {
-		err := cleanup()
-		if err != nil {
-			fmt.Printf("Error during cleanup: %v\n", err)
-		}
-	}()
 
 	pgClient := db.NewPostgresClientFromDBInstance(dbInst)
-	driver := driver.NewPostgresDriverFromDBInstance(dbInst)
+	driver := driver.NewPgxDriverFromDBInstance(dbInst)
 
 	/* Init PHD Client */
 	phdClient, err := phdClient.NewReadOnlyDBClient(phdClient.Config{
