@@ -21,15 +21,15 @@ const (
 
 var (
 	// TODO: should we limit the length of application public key or user id in the path regexp?
-	appsRelaysPath          = regexp.MustCompile(`^/v1/relays/apps/([[:alnum:]_]+)$`)
+	appsRelaysPath          = regexp.MustCompile(`^/v1/relays/apps/([[:alnum:]|_]+)$`)
 	allAppsRelaysPath       = regexp.MustCompile(`^/v1/relays/apps`)
-	usersRelaysPath         = regexp.MustCompile(`^/v1/relays/users/([[:alnum:]_]+)$`)
-	lbRelaysPath            = regexp.MustCompile(`^/v1/relays/endpoints/([[:alnum:]_]+)$`)
+	usersRelaysPath         = regexp.MustCompile(`^/v1/relays/users/([[:alnum:]|_]+)$`)
+	lbRelaysPath            = regexp.MustCompile(`^/v1/relays/endpoints/([[:alnum:]|_]+)$`)
 	allLbsRelaysPath        = regexp.MustCompile(`^/v1/relays/endpoints`)
 	totalRelaysPath         = regexp.MustCompile(`^/v1/relays`)
 	originUsagePath         = regexp.MustCompile(`^/v1/relays/origin-classification`)
 	specificOriginUsagePath = regexp.MustCompile(`^/v1/relays/origin-classification/([[:alnum:]_].*)`)
-	appsLatencyPath         = regexp.MustCompile(`^/v1/latency/apps/([[:alnum:]_]+)$`)
+	appsLatencyPath         = regexp.MustCompile(`^/v1/latency/apps/([[:alnum:]|_]+)$`)
 	allAppsLatencyPath      = regexp.MustCompile(`^/v1/latency/apps`)
 	relayCountsPath         = regexp.MustCompile(`^/v1/relays/counts`)
 )
