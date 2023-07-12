@@ -41,10 +41,7 @@ func gatherOptions() options {
 
 // TODO: need a /health endpoint
 func main() {
-	influxOptions := cmd.GatherInfluxOptions()
 	postgresOptions := cmd.GatherPostgresOptions()
-
-	influxClient := db.NewInfluxDBSource(influxOptions)
 
 	dbInst, err := db.NewDBConnection(postgresOptions)
 	if err != nil {
@@ -61,6 +58,6 @@ func main() {
 	log := logger.New()
 	log.Formatter = &logger.JSONFormatter{}
 
-	collector := collector.NewCollector([]collector.Source{influxClient, driver}, pgClient, options.maxArchiveAge, log)
+	collector := collector.NewCollector([]collector.Source{driver}, pgClient, options.maxArchiveAge, log)
 	collector.Start(context.Background(), options.collectionInterval, options.reportingInterval)
 }
