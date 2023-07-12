@@ -25,18 +25,6 @@ const (
 	FalseStringChar = "n"
 )
 
-func GatherInfluxOptions() db.InfluxDBOptions {
-	return db.InfluxDBOptions{
-		URL:                 environment.MustGetString(INFLUXDB_URL),
-		Token:               environment.MustGetString(INFLUXDB_TOKEN),
-		Org:                 environment.MustGetString(INFLUXDB_ORG),
-		DailyBucket:         environment.MustGetString(INFLUXDB_BUCKET_DAILY),
-		CurrentBucket:       environment.MustGetString(INFLUXDB_BUCKET_CURRENT),
-		DailyOriginBucket:   environment.MustGetString(INFLUXDB_ORIGIN_BUCKET_DAILY),
-		CurrentOriginBucket: environment.MustGetString(INFLUXDB_ORIGIN_BUCKET_CURRENT),
-	}
-}
-
 func GatherPostgresOptions() db.PostgresOptions {
 	usePrivate := environment.GetString(POSTGRES_USE_PRIVATE, FalseStringChar)
 	enableWriting := environment.GetString(ENABLE_WRITING, FalseStringChar)
