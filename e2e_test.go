@@ -349,14 +349,13 @@ var (
 type (
 	RelayMeterTestSuite struct {
 		suite.Suite
-		TestRelays                  [10]TestRelay
-		httpClient                  *httpclient.Client
-		startOfDay, endOfDay        time.Time
-		dateParams, orgID, testLBID string
-		options                     TestClientOptions
+		TestRelays           [10]TestRelay
+		httpClient           *httpclient.Client
+		startOfDay, endOfDay time.Time
+		dateParams, testLBID string
+		options              TestClientOptions
 	}
 	TestClientOptions struct {
-		mainBucket, main1mBucket, orgID,
 		phdBaseURL, phdAPIKey, testUserID,
 		relayMeterBaseURL string
 	}
