@@ -39,7 +39,7 @@ func gatherOptions() options {
 	}
 }
 
-// TODO: need a /health endpoint
+// TODO: add a /health endpoint
 func main() {
 	postgresOptions := cmd.GatherPostgresOptions()
 
