@@ -2,7 +2,7 @@ name: Production deployment us-west-2
 
 on:
   push:
-    branches: 
+    branches:
       - main
   workflow_dispatch:
 
@@ -90,6 +90,7 @@ jobs:
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             POSTGRES_DB=${{ secrets.POSTGRES_DB }}
             API_KEYS=${{ secrets.API_KEYS }}
+            ENABLE_WRITING= ${{ secrets.ENABLE_WRITING }}
             POSTGRES_USE_PRIVATE= ${{ secrets.POSTGRES_USE_PRIVATE }}
 
       - name: Deploy / us-west-2
