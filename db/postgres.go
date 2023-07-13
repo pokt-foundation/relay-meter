@@ -5,6 +5,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,8 @@ import (
 
 	"cloud.google.com/go/cloudsqlconn"
 	"cloud.google.com/go/cloudsqlconn/postgres/pgxv4"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/utils-go/numbers"
 
@@ -81,16 +84,36 @@ func NewDBConnection(options PostgresOptions) (*sql.DB, func() error, error) {
 		return db, nil, nil
 	}
 
-	opts := []cloudsqlconn.Option{}
-	opts = append(opts, cloudsqlconn.WithDefaultDialOptions(cloudsqlconn.WithPrivateIP()))
+	d, err := cloudsqlconn.NewDialer(context.Background(), cloudsqlconn.WithIAMAuthN())
+	if err != nil {
+		return nil, nil, fmt.Errorf("cloudsqlconn.NewDialer failed: %w", err)
+	}
+
+	var dialOpts []cloudsqlconn.DialOption
+	dialOpts = append(dialOpts, cloudsqlconn.WithPrivateIP())
+
+	connectionDetails = fmt.Sprintf("user=%s database=%s", options.User, options.DB)
+	config, err := pgx.ParseConfig(connectionDetails)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	config.DialFunc = func(ctx context.Context, network, instance string) (net.Conn, error) {
+		return d.Dial(ctx, options.Host, dialOpts...)
+	}
+
+	var opts []cloudsqlconn.Option
+	for _, opt := range dialOpts {
+		opts = append(opts, cloudsqlconn.WithDefaultDialOptions(opt))
+	}
 
 	cleanup, err := pgxv4.RegisterDriver("cloudsql-postgres", opts...)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	connectionDetails = fmt.Sprintf("host=%s user=%s dbname=%s sslmode=disable port=5432", options.Host, options.User, options.DB)
-	db, err = sql.Open("cloudsql-postgres", connectionDetails)
+	dbURI := stdlib.RegisterConnConfig(config)
+	db, err = sql.Open("pgx", dbURI)
 	if err != nil {
 		return nil, nil, err
 	}
