@@ -81,12 +81,15 @@ func NewDBConnection(options PostgresOptions) (*sql.DB, func() error, error) {
 		return db, nil, nil
 	}
 
-	cleanup, err := pgxv4.RegisterDriver("cloudsql-postgres", cloudsqlconn.WithIAMAuthN())
+	opts := []cloudsqlconn.Option{}
+	opts = append(opts, cloudsqlconn.WithDefaultDialOptions(cloudsqlconn.WithPrivateIP()))
+
+	cleanup, err := pgxv4.RegisterDriver("cloudsql-postgres", opts...)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	connectionDetails = fmt.Sprintf("host=%s user=%s dbname=%s sslmode=disable", options.Host, options.User, options.DB)
+	connectionDetails = fmt.Sprintf("host=%s user=%s dbname=%s sslmode=disable port=5432", options.Host, options.User, options.DB)
 	db, err = sql.Open("cloudsql-postgres", connectionDetails)
 	if err != nil {
 		return nil, nil, err
