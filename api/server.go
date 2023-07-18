@@ -48,7 +48,7 @@ type ErrorResponse struct {
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	_, err := w.Write([]byte("Relay Meter is up and running!"))
+	_, err := w.Write([]byte("Relay Meter up and running!"))
 	if err != nil {
 		panic(err)
 	}
