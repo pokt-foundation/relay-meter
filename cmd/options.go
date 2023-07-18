@@ -15,7 +15,6 @@ const (
 	INFLUXDB_ORIGIN_BUCKET_CURRENT = "INFLUXDB_ORIGIN_BUCKET_CURRENT"
 
 	POSTGRES_USER        = "POSTGRES_USER"
-	POSTGRES_PASSWORD    = "POSTGRES_PASSWORD"
 	POSTGRES_HOST        = "POSTGRES_HOST"
 	POSTGRES_DB          = "POSTGRES_DB"
 	POSTGRES_USE_PRIVATE = "POSTGRES_USE_PRIVATE"
@@ -28,10 +27,9 @@ const (
 func GatherPostgresOptions() db.PostgresOptions {
 	usePrivate := environment.GetString(POSTGRES_USE_PRIVATE, FalseStringChar)
 	enableWriting := environment.GetString(ENABLE_WRITING, FalseStringChar)
-
+	// Note: Password it's not needed to a IAM user
 	return db.PostgresOptions{
 		User:          environment.MustGetString(POSTGRES_USER),
-		Password:      environment.MustGetString(POSTGRES_PASSWORD),
 		Host:          environment.MustGetString(POSTGRES_HOST),
 		DB:            environment.MustGetString(POSTGRES_DB),
 		UsePrivate:    usePrivate == TrueStringChar,
