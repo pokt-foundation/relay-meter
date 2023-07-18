@@ -27,7 +27,7 @@ const (
 func GatherPostgresOptions() db.PostgresOptions {
 	usePrivate := environment.GetString(POSTGRES_USE_PRIVATE, FalseStringChar)
 	enableWriting := environment.GetString(ENABLE_WRITING, FalseStringChar)
-
+	// Note: Password it's not needed to a IAM user
 	return db.PostgresOptions{
 		User:          environment.MustGetString(POSTGRES_USER),
 		Host:          environment.MustGetString(POSTGRES_HOST),
