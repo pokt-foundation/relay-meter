@@ -101,7 +101,7 @@ func (p *backendProvider) LoadBalancers(ctx context.Context) ([]*types.LoadBalan
 	return p.phd.GetLoadBalancers(ctx)
 }
 
-// TODO: need a /health endpoint
+// TODO: add a /health endpoint
 func main() {
 	log := logger.New()
 	log.Formatter = &logger.JSONFormatter{}
