@@ -9,8 +9,6 @@ import (
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/pokt-foundation/relay-meter/api"
-	"github.com/pokt-foundation/relay-meter/cmd"
-	"github.com/pokt-foundation/utils-go/environment"
 )
 
 const (
@@ -91,14 +89,9 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 
 	counts := mergeTimeRelayCountsMaps(sourcesCounts)
 
-	// TODO: remove after migration
-	enableWrites := environment.GetString(cmd.ENABLE_WRITING, cmd.FalseStringChar) == cmd.TrueStringChar
-	if enableWrites {
-		// TODO: Add counts per origins
-		return c.Writer.WriteDailyUsage(counts, nil)
-	}
+	// TODO: Add counts per origins
+	return c.Writer.WriteDailyUsage(counts, nil)
 
-	return nil
 }
 
 func (c *collector) collectTodaysUsage() error {
@@ -132,12 +125,7 @@ func (c *collector) collectTodaysUsage() error {
 	todaysRelaysInOrigin := mergeRelayCountsMaps(sourcesTodaysRelaysInOrigin)
 	todaysLatency := mergeLatencyMaps(sourcesTodaysLatency)
 
-	// TODO: remove after migration
-	enableWrites := environment.GetString(cmd.ENABLE_WRITING, cmd.FalseStringChar) == cmd.TrueStringChar
-	if enableWrites {
-		return c.Writer.WriteTodaysMetrics(todaysCounts, todaysRelaysInOrigin, todaysLatency)
-	}
-	return nil
+	return c.Writer.WriteTodaysMetrics(todaysCounts, todaysRelaysInOrigin, todaysLatency)
 }
 
 func (c *collector) collect() error {
