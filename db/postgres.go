@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -54,11 +55,11 @@ type Writer interface {
 }
 
 type PostgresOptions struct {
-	Host                      string
-	User                      string
-	Password                  string
-	DB                        string
-	UsePrivate, EnableWriting bool
+	Host       string
+	User       string
+	Password   string
+	DB         string
+	UsePrivate bool
 }
 
 type PostgresClient interface {
@@ -75,7 +76,7 @@ func NewDBConnection(options PostgresOptions) (*sql.DB, func() error, error) {
 
 	// Used for local testing
 	if !options.UsePrivate {
-		connectionDetails = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", options.User, options.Password, options.Host, options.DB)
+		connectionDetails = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", url.QueryEscape(options.User), url.QueryEscape(options.Password), options.Host, options.DB)
 		db, err := sql.Open("postgres", connectionDetails)
 		if err != nil {
 			return nil, nil, err

@@ -14,6 +14,8 @@ import (
 	"github.com/pokt-foundation/utils-go/environment"
 
 	// TODO: replace with pokt-foundation/relay-meter
+	_ "net/http/pprof"
+
 	"github.com/pokt-foundation/relay-meter/api"
 	"github.com/pokt-foundation/relay-meter/cmd"
 	"github.com/pokt-foundation/relay-meter/db"
@@ -105,6 +107,10 @@ func (p *backendProvider) LoadBalancers(ctx context.Context) ([]*types.LoadBalan
 func main() {
 	log := logger.New()
 	log.Formatter = &logger.JSONFormatter{}
+
+	go func() {
+		log.Println("pprof:", http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	options := gatherOptions()
 	postgresOptions := cmd.GatherPostgresOptions()

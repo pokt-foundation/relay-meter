@@ -147,6 +147,8 @@ func handleUploadRelayCounts(ctx context.Context, meter RelayMeter, l *logger.Lo
 		})
 	}
 
+	l.WithFields(logger.Fields{"app_counts": len(counts)}).Info("apiserver: Received handleUploadRelayCounts request")
+
 	err = meter.WriteHTTPSourceRelayCounts(ctx, counts)
 	if err != nil {
 		l.WithFields(logger.Fields{"error": err}).Warn("Error on DB")

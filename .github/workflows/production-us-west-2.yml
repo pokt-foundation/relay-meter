@@ -70,7 +70,6 @@ jobs:
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-            ENABLE_WRITING= ${{ secrets.ENABLE_WRITING }}
             POSTGRES_USE_PRIVATE= ${{ secrets.POSTGRES_USE_PRIVATE }}
 
       - name: Fill in the new image ID / us-west-2 - server
@@ -90,7 +89,6 @@ jobs:
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             POSTGRES_DB=${{ secrets.POSTGRES_DB }}
             API_KEYS=${{ secrets.API_KEYS }}
-            ENABLE_WRITING= ${{ secrets.ENABLE_WRITING }}
             POSTGRES_USE_PRIVATE= ${{ secrets.POSTGRES_USE_PRIVATE }}
 
       - name: Deploy / us-west-2
