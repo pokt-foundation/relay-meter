@@ -67,7 +67,7 @@ type PostgresClient interface {
 	Writer
 }
 
-// DO NOT use as a direct path to the db
+// DO NOT use as a direct path to the database
 //
 // use NewPostgresClientFromDBInstance right after
 func NewDBConnection(options PostgresOptions) (*sql.DB, func() error, error) {
