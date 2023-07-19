@@ -55,11 +55,11 @@ type Writer interface {
 }
 
 type PostgresOptions struct {
-	Host                      string
-	User                      string
-	Password                  string
-	DB                        string
-	UsePrivate, EnableWriting bool
+	Host       string
+	User       string
+	Password   string
+	DB         string
+	UsePrivate bool
 }
 
 type PostgresClient interface {
