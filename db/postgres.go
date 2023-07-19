@@ -93,7 +93,7 @@ func NewDBConnection(options PostgresOptions) (*sql.DB, func() error, error) {
 	var dialOpts []cloudsqlconn.DialOption
 	dialOpts = append(dialOpts, cloudsqlconn.WithPrivateIP())
 
-	connectionDetails = fmt.Sprintf("user=%s database=%s", options.User, options.DB)
+	connectionDetails = fmt.Sprintf("user=%s password=%s database=%s", options.User, options.Password, options.DB)
 	config, err := pgx.ParseConfig(connectionDetails)
 	if err != nil {
 		return nil, nil, err
