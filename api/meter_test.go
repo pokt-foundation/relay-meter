@@ -995,6 +995,8 @@ func TestPortalAppRelays(t *testing.T) {
 				t.Fatalf("Expected error: %v, got: %v", tc.expectedErr, err)
 			}
 
+			got.PublicKeys = sortPublicKeys(got.PublicKeys)
+
 			if diff := cmp.Diff(tc.expected, got); diff != "" {
 				t.Errorf("unexpected value (-want +got):\n%s", diff)
 			}
@@ -1474,4 +1476,27 @@ type fakeDriver struct{}
 
 func (d *fakeDriver) WriteHTTPSourceRelayCounts(ctx context.Context, counts []HTTPSourceRelayCount) error {
 	return nil
+}
+
+// sortPublicKeys sorts a slice of types.PortalAppPublicKey for comparison in tests
+func sortPublicKeys(publicKeys []types.PortalAppPublicKey) []types.PortalAppPublicKey {
+	if len(publicKeys) == 0 {
+		return nil
+	}
+
+	keys := make([]string, len(publicKeys))
+	for i, key := range publicKeys {
+		keys[i] = string(key)
+	}
+
+	// Sort the slice
+	sort.Strings(keys)
+
+	// Convert back to a slice of types.PortalAppPublicKey
+	sortedKeys := make([]types.PortalAppPublicKey, len(keys))
+	for i, key := range keys {
+		sortedKeys[i] = types.PortalAppPublicKey(key)
+	}
+
+	return sortedKeys
 }
