@@ -52,26 +52,26 @@ CREATE TABLE http_source_relay_count (
 -- Seed HTTP Source DB with test relays
 INSERT INTO http_source_relay_count(app_public_key, day, success, error)
 VALUES (
-    'test_34715cae753e67c75fbb340442e7de8e',
-    current_date - INTERVAL '1 day',
+    RPAD('test_34715cae753e67c75fbb340442e7de8e', 64, '0'),
+    current_date,
     1750000,
     2000
   ),
   (
-    'test_8237c72345f12d1b1a8b64a1a7f66fa4',
-    current_date - INTERVAL '1 day',
+    RPAD('test_8237c72345f12d1b1a8b64a1a7f66fa4', 64, '0'),
+    current_date,
     7850000,
     5000
   ),
   (
-    'test_f608500e4fe3e09014fe2411b4a560b5',
-    current_date - INTERVAL '1 day',
+    RPAD('test_f608500e4fe3e09014fe2411b4a560b5', 64, '0'),
+    current_date,
     12850000,
     12000
   ),
   (
-    'test_f6a5d8690ecb669865bd752b7796a920',
-    current_date - INTERVAL '1 day',
+    RPAD('test_f6a5d8690ecb669865bd752b7796a920', 64, '0'),
+    current_date,
     1000,
     500
   );

@@ -123,6 +123,17 @@ func NewDBConnection(options PostgresOptions) (*sql.DB, func() error, error) {
 	return db, cleanup, nil
 }
 
+func NewTestDBConnection(options PostgresOptions) (*sql.DB, error) {
+	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", options.User, options.Password, options.Host, options.DB)
+
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
 func NewPostgresClientFromDBInstance(db *sql.DB) PostgresClient {
 	return &pgClient{DB: db}
 }

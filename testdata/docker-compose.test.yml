@@ -9,13 +9,6 @@ services:
     container_name: relay-meter-collector
     restart: always
     environment:
-      INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_TOKEN: mytoken
-      INFLUXDB_ORG: myorg
-      INFLUXDB_BUCKET_DAILY: mainnetRelayApp1d
-      INFLUXDB_BUCKET_CURRENT: mainnetRelayApp10m
-      INFLUXDB_ORIGIN_BUCKET_DAILY: mainnetOrigin1d
-      INFLUXDB_ORIGIN_BUCKET_CURRENT: mainnetOrigin60m
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pgpassword
       POSTGRES_DB: postgres
@@ -23,9 +16,8 @@ services:
       MAX_ARCHIVE_AGE: 60
       COLLECTION_INTERVAL_SECONDS: 10
       POSTGRES_USE_PRIVATE: "n"
+      APP_ENV: test
     depends_on:
-      influxdb:
-        condition: service_healthy
       relay-meter-db:
         condition: service_healthy
       pocket-http-db:
@@ -50,9 +42,8 @@ services:
       BACKEND_API_URL: http://pocket-http-db:8080
       BACKEND_API_TOKEN: test_api_key_6789
       POSTGRES_USE_PRIVATE: "n"
+      APP_ENV: test
     depends_on:
-      influxdb:
-        condition: service_healthy
       relay-meter-db:
         condition: service_healthy
       relay-meter-collector:
@@ -62,7 +53,7 @@ services:
       portal-db:
         condition: service_healthy
 
-  # Relay Meter Databases
+  # Relay Meter Postgres Database
   relay-meter-db:
     image: postgres:13.7
     container_name: relay-meter-db
@@ -117,6 +108,8 @@ services:
     environment:
       POSTGRES_PASSWORD: pgpassword
       POSTGRES_DB: postgres
+    volumes:
+      - ./pad-pub-keys.sql:/docker-entrypoint-initdb.d/z-init.sql
     healthcheck:
       test: pg_isready -U postgres
       interval: 5s

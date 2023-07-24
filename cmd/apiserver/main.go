@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -35,6 +36,9 @@ const (
 	HTTP_TIMEOUT               = "HTTP_TIMEOUT"
 	HTTP_RETRIES               = "HTTP_RETRIES"
 
+	// App Env determines type of DB connection.
+	appEnv = "APP_ENV"
+
 	defaultLoadIntervalSeconds      = 30
 	defaultDailyMetricsTTLSeconds   = 120
 	defaultsTodaysMetricsTTLSeconds = 60
@@ -56,9 +60,16 @@ type options struct {
 	timeout                 time.Duration
 	retries                 int
 	port                    int
+
+	appEnv types.AppEnv
 }
 
 func gatherOptions() options {
+	appEnv := types.AppEnv(environment.MustGetString(appEnv))
+	if !appEnv.IsValid() {
+		panic(fmt.Sprintf("invalid APP_ENV: %s", appEnv))
+	}
+
 	return options{
 		relayMeterAPIKeys: environment.MustGetStringMap(RELAY_METER_API_KEYS, ";"),
 		phdBaseURL:        environment.MustGetString(PHD_BASE_URL),
@@ -71,6 +82,8 @@ func gatherOptions() options {
 		timeout:                 time.Duration(environment.GetInt64(HTTP_TIMEOUT, defaultHTTPTimeoutSeconds)) * time.Second,
 		retries:                 int(environment.GetInt64(HTTP_RETRIES, defaultHTTPRetries)),
 		port:                    int(environment.GetInt64(API_SERVER_PORT, defaultServerPort)),
+
+		appEnv: appEnv,
 	}
 }
 
@@ -107,6 +120,13 @@ func (p *backendProvider) PortalApps(ctx context.Context) ([]*types.PortalApp, e
 
 // TODO: add a /health endpoint
 func main() {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+	}()
+
 	log := logger.New()
 	log.Formatter = &logger.JSONFormatter{}
 
@@ -116,8 +136,6 @@ func main() {
 
 	options := gatherOptions()
 	postgresOptions := cmd.GatherPostgresOptions()
-
-	ctx := context.Background()
 
 	// TODO: make the data loader run interval configurable
 	meterOptions := api.RelayMeterOptions{
@@ -129,17 +147,30 @@ func main() {
 	log.WithFields(logger.Fields{"postgresOptions": postgresOptions, "meterOptions": meterOptions}).Info("Gathered options.")
 
 	/* Init Postgres Client */
-	dbInst, cleanup, err := db.NewDBConnection(postgresOptions)
-	if err != nil {
-		fmt.Printf("Error setting up Postgres connection: %v\n", err)
-		os.Exit(1)
-	}
-	defer func() {
-		err := cleanup()
+	var dbInst *sql.DB
+
+	switch options.appEnv {
+	case types.AppEnvProduction:
+		dbConn, cleanup, err := db.NewDBConnection(postgresOptions)
 		if err != nil {
-			fmt.Printf("Error during cleanup: %v\n", err)
+			panic(fmt.Errorf("Error setting up Postgres connection: %v\n", err))
 		}
-	}()
+		dbInst = dbConn
+
+		defer func() {
+			err := cleanup()
+			if err != nil {
+				fmt.Printf("Error during cleanup: %v\n", err)
+			}
+		}()
+
+	default:
+		dbConn, err := db.NewTestDBConnection(postgresOptions)
+		if err != nil {
+			panic(fmt.Errorf("Error setting up test Postgres connection: %v\n", err))
+		}
+		dbInst = dbConn
+	}
 
 	pgClient := db.NewPostgresClientFromDBInstance(dbInst)
 	driver := driver.NewPostgresDriverFromDBInstance(dbInst)
@@ -158,8 +189,8 @@ func main() {
 
 	backend := &backendProvider{PostgresClient: pgClient, phd: phdClient}
 
-	meter := api.NewRelayMeter(ctx, backend, driver, log, meterOptions)
-	http.HandleFunc("/", api.GetHttpServer(ctx, meter, log, options.relayMeterAPIKeys))
+	meter := api.NewRelayMeter(context.Background(), backend, driver, log, meterOptions)
+	http.HandleFunc("/", api.GetHttpServer(context.Background(), meter, log, options.relayMeterAPIKeys))
 
 	log.Info("Starting the apiserver...")
 	http.ListenAndServe(fmt.Sprintf(":%d", options.port), nil)

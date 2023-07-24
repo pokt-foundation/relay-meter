@@ -9,21 +9,18 @@ test_env_up:
 	@echo "🧪 Starting up Relay Meter test environment ..."
 	@docker-compose -f ./testdata/docker-compose.test.yml up -d --remove-orphans --build >/dev/null
 	@echo "⏳ Waiting for services to be ready ..."
-	@echo "⏳ Performing health check on relay-meter-apiserver ..."
-	@attempts=0; until curl -s http://localhost:9898/ >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
-	@[[ $$attempts -lt 5 ]] && echo "🖥️  relay-meter-apiserver is online ..." || (echo "❌ relay-meter-apiserver failed health check" && make test_env_down >/dev/null && exit 1)
-	@echo "⏳ Performing health check on influxdb ..."
-	@attempts=0; until curl -s http://localhost:8086/ping >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
-	@[[ $$attempts -lt 5 ]] && echo "🖥️  influxdb is online ..." || (echo "❌ influxdb failed health check" && make test_env_down >/dev/null && exit 1)
-	@echo "⏳ Waiting for relay-meter-db to be ready ..."
-	@attempts=0; until pg_isready -h localhost -p 5434 -U postgres >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
-	@[[ $$attempts -lt 5 ]] && echo "🐘 relay-meter-db is up ..." || (echo "❌ relay-meter-db failed to start" && make test_env_down >/dev/null && exit 1)
-	@echo "⏳ Performing health check on pocket-http-db ..."
-	@attempts=0; until curl -s http://localhost:8080/healthz >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
-	@[[ $$attempts -lt 5 ]] && echo "🖥️  pocket-http-db is online ..." || (echo "❌ pocket-http-db failed health check" && make test_env_down >/dev/null && exit 1)
 	@echo "⏳ Waiting for portal-db to be ready ..."
 	@attempts=0; until pg_isready -h localhost -p 5432 -U postgres >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
 	@[[ $$attempts -lt 5 ]] && echo "🐘 portal-db is up ..." || (echo "❌ portal-db failed to start" && make test_env_down >/dev/null && exit 1)
+	@echo "⏳ Performing health check on pocket-http-db ..."
+	@attempts=0; until curl -s http://localhost:8080/healthz >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
+	@[[ $$attempts -lt 5 ]] && echo "🖥️  pocket-http-db is online ..." || (echo "❌ pocket-http-db failed health check" && make test_env_down >/dev/null && exit 1)
+	@echo "⏳ Waiting for relay-meter-db to be ready ..."
+	@attempts=0; until pg_isready -h localhost -p 5434 -U postgres >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
+	@[[ $$attempts -lt 5 ]] && echo "🐘 relay-meter-db is up ..." || (echo "❌ relay-meter-db failed to start" && make test_env_down >/dev/null && exit 1)
+	@echo "⏳ Performing health check on relay-meter-apiserver ..."
+	@attempts=0; until curl -s http://localhost:9898/ >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
+	@[[ $$attempts -lt 5 ]] && echo "🖥️  relay-meter-apiserver is online ..." || (echo "❌ relay-meter-apiserver failed health check" && make test_env_down >/dev/null && exit 1)
 	@echo "🚀 Test environment is up!"
 test_env_down:
 	@echo "🧪 Shutting down Relay Meter test environment ..."
