@@ -793,13 +793,6 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 			}
 		}
 	}(maxPastDays)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 // AdjustTimePeriod sets the two parameters, i.e. from and to, according to the following rules:

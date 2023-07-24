@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"encoding/json"
@@ -55,14 +55,13 @@ var (
 type (
 	relayMeterTestSuite struct {
 		suite.Suite
-		httpClient           *httpclient.Client
-		dateParams, testLBID string
-		options              testClientOptions
+		httpClient *httpclient.Client
+		dateParams string
+		options    testClientOptions
 	}
 	testClientOptions struct {
 		phdBaseURL, phdAPIKey,
 		relayMeterBaseURL, relayMeterAPIKey string
-		testUserID types.UserID
 	}
 )
 

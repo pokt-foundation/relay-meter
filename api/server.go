@@ -203,7 +203,7 @@ func handleEndpoint(ctx context.Context, l *logger.Logger, meterEndpoint func(fr
 	}
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, string(bytes))
+	fmt.Fprint(w, string(bytes))
 }
 
 func timePeriod(req *http.Request) (time.Time, time.Time, error) {
@@ -336,6 +336,6 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 		}
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, string(bytes))
+		fmt.Fprint(w, string(bytes))
 	}
 }
