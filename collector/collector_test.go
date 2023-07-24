@@ -8,6 +8,7 @@ import (
 
 	logger "github.com/sirupsen/logrus"
 
+	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
 )
 
@@ -153,35 +154,35 @@ type fakeSource struct {
 	requestedFrom time.Time
 	requestedTo   time.Time
 
-	response    map[time.Time]map[string]api.RelayCounts
+	response    map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts
 	responseErr error
 
-	todaysCounts           map[string]api.RelayCounts
-	todaysCountsPerOrigin  map[string]api.RelayCounts
-	todaysLatency          map[string][]api.Latency
+	todaysCounts           map[types.PortalAppPublicKey]api.RelayCounts
+	todaysCountsPerOrigin  map[types.PortalAppOrigin]api.RelayCounts
+	todaysLatency          map[types.PortalAppPublicKey][]api.Latency
 	todaysMetricsCollected bool
 	dailyMetricsCollected  bool
 	todaysLatencyCollected bool
 }
 
-func (f *fakeSource) DailyCounts(from, to time.Time) (map[time.Time]map[string]api.RelayCounts, error) {
+func (f *fakeSource) DailyCounts(from, to time.Time) (map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts, error) {
 	f.dailyMetricsCollected = true
 	f.requestedFrom = from
 	f.requestedTo = to
 	return f.response, f.responseErr
 }
 
-func (f *fakeSource) TodaysCounts() (map[string]api.RelayCounts, error) {
+func (f *fakeSource) TodaysCounts() (map[types.PortalAppPublicKey]api.RelayCounts, error) {
 	f.todaysMetricsCollected = true
 	return f.todaysCounts, nil
 }
 
-func (f *fakeSource) TodaysCountsPerOrigin() (map[string]api.RelayCounts, error) {
+func (f *fakeSource) TodaysCountsPerOrigin() (map[types.PortalAppOrigin]api.RelayCounts, error) {
 	f.todaysMetricsCollected = true
 	return f.todaysCountsPerOrigin, nil
 }
 
-func (f *fakeSource) TodaysLatency() (map[string][]api.Latency, error) {
+func (f *fakeSource) TodaysLatency() (map[types.PortalAppPublicKey][]api.Latency, error) {
 	f.todaysLatencyCollected = true
 	return f.todaysLatency, nil
 }
@@ -203,17 +204,17 @@ func (f *fakeWriter) ExistingMetricsTimespan() (time.Time, time.Time, error) {
 	return f.first, f.last, nil
 }
 
-func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
+func (f *fakeWriter) WriteDailyUsage(counts map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts, countsOrigin map[types.PortalAppOrigin]api.RelayCounts) error {
 	return nil
 }
 
-func (f *fakeWriter) WriteTodaysMetrics(counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts, latencies map[string][]api.Latency) error {
+func (f *fakeWriter) WriteTodaysMetrics(counts map[types.PortalAppPublicKey]api.RelayCounts, countsOrigin map[types.PortalAppOrigin]api.RelayCounts, latencies map[types.PortalAppPublicKey][]api.Latency) error {
 	f.todaysWrites++
 	f.todaysLatencyWrites++
 	return nil
 }
 
-func (f *fakeWriter) WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[string]api.RelayCounts, countsOrigin map[string]api.RelayCounts) error {
+func (f *fakeWriter) WriteTodaysUsage(ctx context.Context, tx *sql.Tx, counts map[types.PortalAppPublicKey]api.RelayCounts, countsOrigin map[types.PortalAppOrigin]api.RelayCounts) error {
 	f.todaysWrites++
 	return nil
 }

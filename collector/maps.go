@@ -3,11 +3,12 @@ package collector
 import (
 	"time"
 
+	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
 )
 
-func mergeTimeRelayCountsMaps(dayMaps []map[time.Time]map[string]api.RelayCounts) map[time.Time]map[string]api.RelayCounts {
-	rawMergedMap := make(map[time.Time][]map[string]api.RelayCounts)
+func mergeTimeRelayCountsMaps(dayMaps []map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts) map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts {
+	rawMergedMap := make(map[time.Time][]map[types.PortalAppPublicKey]api.RelayCounts)
 
 	// first we separate the app maps by day
 	for _, dayMap := range dayMaps {
@@ -16,7 +17,7 @@ func mergeTimeRelayCountsMaps(dayMaps []map[time.Time]map[string]api.RelayCounts
 		}
 	}
 
-	mergedMap := make(map[time.Time]map[string]api.RelayCounts)
+	mergedMap := make(map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts)
 
 	// then we merge the app maps of each day
 	for day, appMapSlice := range rawMergedMap {
@@ -26,8 +27,8 @@ func mergeTimeRelayCountsMaps(dayMaps []map[time.Time]map[string]api.RelayCounts
 	return mergedMap
 }
 
-func mergeRelayCountsMaps(appMaps []map[string]api.RelayCounts) map[string]api.RelayCounts {
-	mergedMap := make(map[string]api.RelayCounts)
+func mergeRelayCountsMaps(appMaps []map[types.PortalAppPublicKey]api.RelayCounts) map[types.PortalAppPublicKey]api.RelayCounts {
+	mergedMap := make(map[types.PortalAppPublicKey]api.RelayCounts)
 
 	for _, appMap := range appMaps {
 		for app, count := range appMap {
@@ -45,8 +46,27 @@ func mergeRelayCountsMaps(appMaps []map[string]api.RelayCounts) map[string]api.R
 	return mergedMap
 }
 
-func mergeLatencyMaps(latencyMaps []map[string][]api.Latency) map[string][]api.Latency {
-	mergedMap := make(map[string][]api.Latency)
+func mergeRelayCountsMapsByOrigin(appMaps []map[types.PortalAppOrigin]api.RelayCounts) map[types.PortalAppOrigin]api.RelayCounts {
+	mergedMap := make(map[types.PortalAppOrigin]api.RelayCounts)
+
+	for _, appMap := range appMaps {
+		for app, count := range appMap {
+			if _, ok := mergedMap[app]; ok {
+				mergedMap[app] = api.RelayCounts{
+					Success: mergedMap[app].Success + count.Success,
+					Failure: mergedMap[app].Failure + count.Failure,
+				}
+			} else {
+				mergedMap[app] = count
+			}
+		}
+	}
+
+	return mergedMap
+}
+
+func mergeLatencyMaps(latencyMaps []map[types.PortalAppPublicKey][]api.Latency) map[types.PortalAppPublicKey][]api.Latency {
+	mergedMap := make(map[types.PortalAppPublicKey][]api.Latency)
 
 	for _, latencyMap := range latencyMaps {
 		for app, latency := range latencyMap {

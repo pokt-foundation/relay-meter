@@ -47,7 +47,7 @@ services:
       POSTGRES_PASSWORD: pgpassword
       POSTGRES_DB: postgres
       POSTGRES_HOST: relay-meter-db:5434
-      BACKEND_API_URL: http://pocket-http-db:8090
+      BACKEND_API_URL: http://pocket-http-db:8080
       BACKEND_API_TOKEN: test_api_key_6789
       POSTGRES_USE_PRIVATE: "n"
     depends_on:
@@ -110,9 +110,9 @@ services:
   # Pocket HTTP DB Containers
   pocket-http-db:
     container_name: pocket-http-db
-    build: github.com/pokt-foundation/pocket-http-db.git#master
+    build: github.com/pokt-foundation/pocket-http-db.git#staging
     ports:
-      - "8090:8090"
+      - "8080:8080"
     environment:
       PG_USER: postgres
       PG_PASSWORD: pgpassword
@@ -120,17 +120,19 @@ services:
       PG_PORT: 5432
       PG_DATABASE: postgres
       API_KEYS: test_api_key_6789
-      PORT: 8090
+      PORT: 8080
+      APP_ENV: test
     depends_on:
       portal-db:
         condition: service_healthy
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8090 || exit 1
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/healthz"]
       interval: 5s
-      retries: 3
+      timeout: 5s
+      retries: 5
 
   portal-db:
-    image: pocketfoundation/test-portal-postgres:1.10.8
+    image: pocketfoundation/test-portal-postgres:latest
     container_name: portal-db
     restart: always
     ports:
@@ -140,3 +142,5 @@ services:
       POSTGRES_DB: postgres
     healthcheck:
       test: pg_isready -U postgres
+      interval: 5s
+      retries: 5
