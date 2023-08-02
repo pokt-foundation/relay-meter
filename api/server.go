@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	logger "github.com/sirupsen/logrus"
@@ -32,6 +33,8 @@ var (
 	appsLatencyPath         = regexp.MustCompile(`^/v1/latency/apps/([[:alnum:]|_]+)$`)
 	allAppsLatencyPath      = regexp.MustCompile(`^/v1/latency/apps`)
 	relayCountsPath         = regexp.MustCompile(`^/v1/relays/counts`)
+
+	mutex sync.Mutex
 )
 
 // TODO: move these custom error codes to the api package
@@ -149,7 +152,10 @@ func handleUploadRelayCounts(ctx context.Context, meter RelayMeter, l *logger.Lo
 
 	l.WithFields(logger.Fields{"app_counts": len(counts)}).Info("apiserver: Received handleUploadRelayCounts request")
 
+	mutex.Lock() // prevent DB deadlock by blocking the request until the last one finishes
 	err = meter.WriteHTTPSourceRelayCounts(ctx, counts)
+	mutex.Unlock()
+
 	if err != nil {
 		l.WithFields(logger.Fields{"error": err}).Warn("Error on DB")
 		http.Error(w, fmt.Sprintf("Error on DB: %v", err), http.StatusInternalServerError)
