@@ -3,15 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
-	logger "github.com/sirupsen/logrus"
-
 	phdClient "github.com/pokt-foundation/db-client/v2/client"
 	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/utils-go/environment"
+	"github.com/pokt-foundation/utils-go/logger"
 
 	// TODO: replace with pokt-foundation/relay-meter
 	_ "net/http/pprof"
@@ -107,11 +107,10 @@ func (p *backendProvider) PortalApps(ctx context.Context) ([]*types.PortalApp, e
 
 // TODO: add a /health endpoint
 func main() {
-	log := logger.New()
-	log.Formatter = &logger.JSONFormatter{}
+	logger := logger.New()
 
 	go func() {
-		log.Println("pprof:", http.ListenAndServe("localhost:6060", nil))
+		logger.Info("pprof:", http.ListenAndServe("localhost:6060", nil))
 	}()
 
 	options := gatherOptions()
@@ -126,7 +125,10 @@ func main() {
 		TodaysMetricsTTL: time.Duration(options.todaysMetricsTTLSeconds) * time.Second,
 		MaxPastDays:      time.Duration(options.maxPastDays) * 24 * time.Hour,
 	}
-	log.WithFields(logger.Fields{"postgresOptions": postgresOptions, "meterOptions": meterOptions}).Info("Gathered options.")
+	logger.Info("Gathered options.",
+		slog.Group("postgresOptions", postgresOptions),
+		slog.Group("meterOptions", meterOptions),
+	)
 
 	/* Init Postgres Client */
 	dbInst, cleanup, err := db.NewDBConnection(postgresOptions)
@@ -152,17 +154,17 @@ func main() {
 		Timeout: options.timeout,
 	})
 	if err != nil {
-		log.Error(fmt.Sprintf("create PHD client failed with error: %s", err.Error()))
+		logger.Error(fmt.Sprintf("create PHD client failed with error: %s", err.Error()))
 		panic(err)
 	}
 
 	backend := &backendProvider{PostgresClient: pgClient, phd: phdClient}
 
-	meter := api.NewRelayMeter(ctx, backend, driver, log, meterOptions)
-	http.HandleFunc("/", api.GetHttpServer(ctx, meter, log, options.relayMeterAPIKeys))
+	meter := api.NewRelayMeter(ctx, backend, driver, logger, meterOptions)
+	http.HandleFunc("/", api.GetHttpServer(ctx, meter, logger, options.relayMeterAPIKeys))
 
-	log.Info("Starting the apiserver...")
+	logger.Info("Starting the apiserver...")
 	http.ListenAndServe(fmt.Sprintf(":%d", options.port), nil)
 
-	log.Warn("Unexpected exit.")
+	logger.Warn("Unexpected exit.")
 }

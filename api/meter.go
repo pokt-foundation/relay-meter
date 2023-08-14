@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pokt-foundation/portal-db/v2/types"
-	logger "github.com/sirupsen/logrus"
+	"github.com/pokt-foundation/utils-go/logger"
 )
 
 const (
@@ -197,32 +198,46 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 		// TODO: send backend requests concurrently
 		dailyUsage, err = r.Backend.DailyUsage(from, to)
 		if err != nil {
-			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading daily usage data")
+			r.Logger.Warn("Error loading daily usage data",
+				slog.String("error", err.Error()),
+			)
 			return err
 		}
-		r.Logger.WithFields(logger.Fields{"daily_metrics_count": len(dailyUsage)}).Info("Received daily metrics")
+		r.Logger.Info("Received daily metrics",
+			slog.Int("daily_metrics_count", len(dailyUsage)),
+		)
 	}
 
 	if noDataYet || now.After(r.todaysTTL) {
 		updateToday = true
 		todaysUsage, err = r.Backend.TodaysUsage()
 		if err != nil {
-			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading todays usage data")
+			r.Logger.Warn("Error loading todays usage data",
+				slog.String("error", err.Error()),
+			)
 			return err
 		}
 
 		todaysLatency, err = r.Backend.TodaysLatency()
 		if err != nil {
-			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading todays latency data")
+			r.Logger.Warn("Error loading todays latency data",
+				slog.String("error", err.Error()),
+			)
 		}
-		r.Logger.WithFields(logger.Fields{"todays_metrics_count": len(todaysUsage)}).Info("Received todays metrics")
+		r.Logger.Info("Received todays metrics",
+			slog.Int("todays_metrics_count", len(todaysUsage)),
+		)
 
 		todaysOriginUsage, err = r.Backend.TodaysOriginUsage()
 		if err != nil {
-			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error loading todays origin usage data")
+			r.Logger.Warn("Error loading todays origin usage data",
+				slog.String("error", err.Error()),
+			)
 			return err
 		}
-		r.Logger.WithFields(logger.Fields{"todays_origin_metrics_count": len(todaysOriginUsage)}).Info("Received todays metrics")
+		r.Logger.Info("Received todays metrics",
+			slog.Int("todays_origin_metrics_count", len(todaysOriginUsage)),
+		)
 	}
 
 	if !updateDaily && !updateToday {
@@ -264,7 +279,11 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 //
 //	The From parameter is taken to mean the very start of the day that it specifies: the returned result includes all such relays
 func (r *relayMeter) AppRelays(ctx context.Context, appPubKey types.PortalAppPublicKey, from, to time.Time) (AppRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"appPubKey": appPubKey, "from": from, "to": to}).Info("apiserver: Received AppRelays request")
+	r.Logger.Info("apiserver: Received AppRelays request",
+		slog.String("appPubKey", string(appPubKey)),
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 	resp := AppRelaysResponse{
 		From:      from,
 		To:        to,
@@ -308,7 +327,9 @@ func (r *relayMeter) AppRelays(ctx context.Context, appPubKey types.PortalAppPub
 }
 
 func (r *relayMeter) AppLatency(ctx context.Context, appPubKey types.PortalAppPublicKey) (AppLatencyResponse, error) {
-	r.Logger.WithFields(logger.Fields{"appPubKey": appPubKey}).Info("apiserver: Received AppLatency request")
+	r.Logger.Info("apiserver: Received AppLatency request",
+		slog.String("appPubKey", string(appPubKey)),
+	)
 
 	appLatency := r.todaysLatency[appPubKey]
 
@@ -354,7 +375,10 @@ func (r *relayMeter) AllAppsLatencies(ctx context.Context) ([]AppLatencyResponse
 }
 
 func (r *relayMeter) AllAppsRelays(ctx context.Context, from, to time.Time) ([]AppRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received AllAppRelays request")
+	r.Logger.Info("apiserver: Received AllAppRelays request",
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 
 	// TODO: enforce MaxArchiveAge on From parameter
 	// TODO: enforce Today as maximum value for To parameter
@@ -418,7 +442,10 @@ func (r *relayMeter) AllAppsRelays(ctx context.Context, from, to time.Time) ([]A
 }
 
 func (r *relayMeter) AllRelaysOrigin(ctx context.Context, from, to time.Time) ([]OriginClassificationsResponse, error) {
-	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received classifications by origin request")
+	r.Logger.Info("apiserver: Received classifications by origin request",
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 
 	// TODO: enforce MaxArchiveAge on From parameter
 	// TODO: enforce Today as maximum value for To parameter
@@ -458,7 +485,10 @@ func (r *relayMeter) AllRelaysOrigin(ctx context.Context, from, to time.Time) ([
 }
 
 func (r *relayMeter) RelaysOrigin(ctx context.Context, origin types.PortalAppOrigin, from, to time.Time) (OriginClassificationsResponse, error) {
-	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received classifications by origin request")
+	r.Logger.Info("apiserver: Received classifications by origin request",
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 
 	// TODO: enforce MaxArchiveAge on From parameter
 	// TODO: enforce Today as maximum value for To parameter
@@ -496,7 +526,11 @@ func (r *relayMeter) RelaysOrigin(ctx context.Context, origin types.PortalAppOri
 
 // TODO: refactor the common processing done by both AppRelays and UserRelays
 func (r *relayMeter) UserRelays(ctx context.Context, userID types.UserID, from, to time.Time) (UserRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"userID": userID, "from": from, "to": to}).Info("apiserver: Received UserRelays request")
+	r.Logger.Info("apiserver: Received UserRelays request",
+		slog.String("userID", string(userID)),
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 	resp := UserRelaysResponse{
 		From: from,
 		To:   to,
@@ -516,7 +550,12 @@ func (r *relayMeter) UserRelays(ctx context.Context, userID types.UserID, from, 
 
 	appPubKeys, err := r.Backend.UserPortalAppPubKeys(ctx, userID)
 	if err != nil {
-		r.Logger.WithFields(logger.Fields{"userID": userID, "from": from, "to": to, "error": err}).Warn("Error getting user applications processing UserRelays request")
+		r.Logger.Warn("Error getting user applications processing UserRelays request",
+			slog.String("error", err.Error()),
+			slog.String("userID", string(userID)),
+			slog.Time("from", from),
+			slog.Time("to", to),
+		)
 		return resp, err
 	}
 
@@ -551,7 +590,10 @@ func (r *relayMeter) UserRelays(ctx context.Context, userID types.UserID, from, 
 }
 
 func (r *relayMeter) TotalRelays(ctx context.Context, from, to time.Time) (TotalRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received TotalRelays request")
+	r.Logger.Info("apiserver: Received TotalRelays request",
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 	resp := TotalRelaysResponse{
 		From: from,
 		To:   to,
@@ -599,7 +641,11 @@ func (r *relayMeter) TotalRelays(ctx context.Context, from, to time.Time) (Total
 
 // PortalAppRelays returns the metrics for all applications of a portal app (AKA portalAppID)
 func (r *relayMeter) PortalAppRelays(ctx context.Context, portalAppID types.PortalAppID, from, to time.Time) (PortalAppRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"portalAppID": portalAppID, "from": from, "to": to}).Info("apiserver: Received PortalAppRelays request")
+	r.Logger.Info("apiserver: Received PortalAppRelays request",
+		slog.String("portalAppID", string(portalAppID)),
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 	resp := PortalAppRelaysResponse{
 		From:        from,
 		To:          to,
@@ -619,7 +665,12 @@ func (r *relayMeter) PortalAppRelays(ctx context.Context, portalAppID types.Port
 
 	portalApp, err := r.Backend.PortalApp(ctx, portalAppID)
 	if err != nil {
-		r.Logger.WithFields(logger.Fields{"portalAppID": portalAppID, "from": from, "to": to, "error": err}).Warn("Error getting PortalApp processing PortalApp Relays request")
+		r.Logger.Warn("Error getting PortalApp processing PortalApp Relays request",
+			slog.String("error", err.Error()),
+			slog.String("portalAppID", string(portalAppID)),
+			slog.Time("from", from),
+			slog.Time("to", to),
+		)
 		return resp, err
 	}
 	if portalApp == nil {
@@ -666,7 +717,10 @@ func (r *relayMeter) PortalAppRelays(ctx context.Context, portalAppID types.Port
 
 // AllPortalAppsRelays returns the metrics for all applications of all portal apps (AKA portalAppIDs)
 func (r *relayMeter) AllPortalAppsRelays(ctx context.Context, from, to time.Time) ([]PortalAppRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received AllPortalAppRelays request")
+	r.Logger.Info("apiserver: Received AllPortalAppRelays request",
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 
 	// TODO: enforce MaxArchiveAge on From parameter
 	// TODO: enforce Today as maximum value for To parameter
@@ -681,7 +735,11 @@ func (r *relayMeter) AllPortalAppsRelays(ctx context.Context, from, to time.Time
 
 	portalApps, err := r.Backend.PortalApps(ctx)
 	if err != nil {
-		r.Logger.WithFields(logger.Fields{"from": from, "to": to, "error": err}).Warn("Error getting portalAppID/loadbalancers applications processing AllPortalAppRelays request")
+		r.Logger.Warn("Error getting portalAppID/loadbalancers applications processing AllPortalAppRelays request",
+			slog.String("error", err.Error()),
+			slog.Time("from", from),
+			slog.Time("to", to),
+		)
 		return nil, err
 	}
 
@@ -767,18 +825,27 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 		from := time.Now().Add(max)
 		from, to, err := AdjustTimePeriod(from, time.Now())
 		if err != nil {
-			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
+			r.Logger.Warn("Error setting timespan for data loader",
+				slog.String("error", err.Error()),
+			)
 			return
 		}
 
-		r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting data loader...")
+		r.Logger.Info("Starting data loader...",
+			slog.Time("from", from),
+			slog.Time("to", to),
+		)
 
 		if err := r.loadData(from, to); err != nil {
-			r.Logger.WithFields(logger.Fields{"error": err}).Warn("Error setting timespan for data loader")
+			r.Logger.Warn("Error setting timespan for data loader",
+				slog.String("error", err.Error()),
+			)
 		}
 	}
 
-	r.Logger.WithFields(logger.Fields{"maxArchiveAge": maxPastDays}).Info("Running initial data loader iteration...")
+	r.Logger.Info("Running initial data loader iteration...",
+		slog.Duration("maxArchiveAge", maxPastDays),
+	)
 	load(maxPastDays)
 
 	go func(maxDays time.Duration) {

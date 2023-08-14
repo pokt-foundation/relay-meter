@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/pokt-foundation/portal-db/v2/types"
-	logger "github.com/sirupsen/logrus"
+	"github.com/pokt-foundation/utils-go/logger"
 )
 
 const (
@@ -132,7 +133,9 @@ func handleUploadRelayCounts(ctx context.Context, meter RelayMeter, l *logger.Lo
 	var inCounts []HTTPSourceRelayCountInput
 	err := decoder.Decode(&inCounts)
 	if err != nil {
-		l.WithFields(logger.Fields{"error": err}).Warn("Invalid input")
+		l.Warn("Invalid input",
+			slog.String("error", err.Error()),
+		)
 		http.Error(w, fmt.Sprintf("Invalid input: %v", err), http.StatusBadRequest)
 		return
 	}
@@ -149,11 +152,15 @@ func handleUploadRelayCounts(ctx context.Context, meter RelayMeter, l *logger.Lo
 		})
 	}
 
-	l.WithFields(logger.Fields{"app_counts": len(counts)}).Info("apiserver: Received handleUploadRelayCounts request")
+	l.Info("apiserver: Received handleUploadRelayCounts request",
+		slog.Int("app_counts", len(counts)),
+	)
 
 	err = meter.WriteHTTPSourceRelayCounts(ctx, counts)
 	if err != nil {
-		l.WithFields(logger.Fields{"error": err}).Warn("Error on DB")
+		l.Warn("Error on DB",
+			slog.String("error", err.Error()),
+		)
 		http.Error(w, fmt.Sprintf("Error on DB: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -163,12 +170,14 @@ func handleUploadRelayCounts(ctx context.Context, meter RelayMeter, l *logger.Lo
 }
 
 func handleEndpoint(ctx context.Context, l *logger.Logger, meterEndpoint func(from, to time.Time) (any, error), w http.ResponseWriter, req *http.Request) {
-	log := l.WithFields(logger.Fields{"Request": req})
+	log := l.With(slog.Group("request", "host", req.Host, "method", req.Method, "url", req.URL))
 	w.Header().Add("Content-Type", "application/json")
 
 	from, to, err := timePeriod(req)
 	if err != nil {
-		log.WithFields(logger.Fields{"error": err}).Warn("Invalid timespan")
+		log.Warn("Invalid timespan",
+			slog.String("error", err.Error()),
+		)
 		http.Error(w, fmt.Sprintf("Invalid timespan: %v", err), http.StatusBadRequest)
 		return
 	}
@@ -176,7 +185,7 @@ func handleEndpoint(ctx context.Context, l *logger.Logger, meterEndpoint func(fr
 	// TODO: separate Internal errors from Request errors using custom errors returned by the meter service
 	meterResponse, meterErr := meterEndpoint(from, to)
 	if meterErr != nil {
-		errLogger := l.WithFields(logger.Fields{"error": meterErr})
+		errLogger := l.With(slog.String("error", meterErr.Error()))
 
 		switch {
 		case meterErr != nil && errors.Is(meterErr, InvalidRequest):
@@ -197,13 +206,15 @@ func handleEndpoint(ctx context.Context, l *logger.Logger, meterEndpoint func(fr
 
 	bytes, err := json.Marshal(meterResponse)
 	if err != nil {
-		log.WithFields(logger.Fields{"error": err}).Warn("Internal error marshalling response")
+		log.Warn("Internal error marshalling response",
+			slog.String("error", err.Error()),
+		)
 		http.Error(w, fmt.Sprintf("Internal error marshalling the response %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, string(bytes))
+	fmt.Fprint(w, string(bytes))
 }
 
 func timePeriod(req *http.Request) (time.Time, time.Time, error) {
@@ -251,7 +262,7 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 	}
 
 	return func(w http.ResponseWriter, req *http.Request) {
-		log := l.WithFields(logger.Fields{"Request": *req})
+		log := l.With(slog.Group("request", "host", req.Host, "method", req.Method, "url", req.URL))
 
 		if strings.HasPrefix(req.URL.Path, "/v1") && !apiKeys[req.Header.Get("Authorization")] {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -330,12 +341,14 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 		log.Warn("Invalid request endpoint")
 		bytes, err := json.Marshal(ErrorResponse{Message: fmt.Sprintf("Invalid request path: %s", req.URL.Path)})
 		if err != nil {
-			log.WithFields(logger.Fields{"error": err}).Warn("Internal error marshalling response")
+			log.Warn("Internal error marshalling response",
+				slog.String("error", err.Error()),
+			)
 			http.Error(w, fmt.Sprintf("Internal error marshalling the response %v", err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, string(bytes))
+		fmt.Fprint(w, string(bytes))
 	}
 }
