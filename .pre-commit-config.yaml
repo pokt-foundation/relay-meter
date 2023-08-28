@@ -7,16 +7,16 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: no-commit-to-branch
-  - repo: https://github.com/dnephin/pre-commit-golang
-    rev: v0.5.1
+  - repo: https://github.com/pokt-foundation/backend-precommit-hooks
+    rev: v0.0.5
     hooks:
       - id: go-fmt
       - id: go-imports
-      # TODO: re-enable `golangci-lint` and fix all linter errors before re-committing
-      # - id: golangci-lint
+      - id: golangci-lint
       - id: go-critic
-      # - id: go-build
+      - id: go-build
       - id: go-mod-tidy
+      - id: go-unit-tests
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.4.0
     hooks:

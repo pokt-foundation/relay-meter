@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,17 +24,11 @@ const testAPIKey = "test_api_key_1234"
 The E2E suite also runs on all Pull Requests to the main or staging branches.
 
 The End-to-End test suite uses a Dockerized reproduction of Relay Meter (Collector & API Server)
-and all containers it depends on (Influx DB, Relay Meter Postgres DB, PHD & PHD Postgres DB).
-
-It follows the flow:
-- Populates InfluxDB with 100,000 relays with timestamps across a 24 hour period.
-- Influx DB tasks collect and populate time series buckets from the main bucket.
-- The Collector will collect these relays from Influx and save them to Postgres.
-- The API Server will serve this relay data from Postgres via REST endpoints.
+and all containers it depends on (Relay Meter Postgres DB, PHD & PHD Postgres DB).
 
 The test verifies this data by verifying it can be accessed from the API server's endpoints. */
 
-// Sets up the suite (~1 minute due to need for Influx tasks and Collector to run) and runs all the tests.
+// Sets up the suite and runs all the tests.
 // TODO: update e2e test to include the new relay-collection logic
 func Test_RunSuite_E2E(t *testing.T) {
 	if testing.Short() {
@@ -341,9 +334,7 @@ func (ts *RelayMeterTestSuite) Test_RunTests() {
 
 /* ---------- Relay Meter Test Suite ---------- */
 var (
-	ctx                      = context.Background()
-	ErrResponseNotOK         = errors.New("Response not OK")
-	ErrInfluxClientUnhealthy = errors.New("test influx client is unhealthy")
+	ErrResponseNotOK = errors.New("Response not OK")
 )
 
 type (
@@ -352,13 +343,12 @@ type (
 		TestRelays           [10]TestRelay
 		httpClient           *httpclient.Client
 		startOfDay, endOfDay time.Time
-		dateParams, testLBID string
+		dateParams           string
 		options              TestClientOptions
 	}
 	TestClientOptions struct {
-		phdBaseURL, phdAPIKey, testUserID,
 		relayMeterBaseURL string
-		testUserID types.UserID
+		testUserID        types.UserID
 	}
 	TestRelay struct {
 		ApplicationPublicKey types.PortalAppPublicKey `json:"applicationPublicKey"`

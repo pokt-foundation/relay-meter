@@ -162,7 +162,11 @@ func main() {
 	http.HandleFunc("/", api.GetHttpServer(ctx, meter, log, options.relayMeterAPIKeys))
 
 	log.Info("Starting the apiserver...")
-	http.ListenAndServe(fmt.Sprintf(":%d", options.port), nil)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", options.port), nil)
+	if err != nil {
+		log.Error(fmt.Sprintf("http listen and server failed with error: %s", err.Error()))
+		panic(err)
+	}
 
 	log.Warn("Unexpected exit.")
 }

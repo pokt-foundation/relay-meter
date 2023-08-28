@@ -9,13 +9,6 @@ services:
     container_name: relay-meter-collector
     restart: always
     environment:
-      INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_TOKEN: mytoken
-      INFLUXDB_ORG: myorg
-      INFLUXDB_BUCKET_DAILY: mainnetRelayApp1d
-      INFLUXDB_BUCKET_CURRENT: mainnetRelayApp10m
-      INFLUXDB_ORIGIN_BUCKET_DAILY: mainnetOrigin1d
-      INFLUXDB_ORIGIN_BUCKET_CURRENT: mainnetOrigin60m
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pgpassword
       POSTGRES_DB: postgres
@@ -24,8 +17,6 @@ services:
       COLLECTION_INTERVAL_SECONDS: 10
       POSTGRES_USE_PRIVATE: "n"
     depends_on:
-      influxdb:
-        condition: service_healthy
       relay-meter-db:
         condition: service_healthy
       pocket-http-db:
@@ -51,8 +42,6 @@ services:
       BACKEND_API_TOKEN: test_api_key_6789
       POSTGRES_USE_PRIVATE: "n"
     depends_on:
-      influxdb:
-        condition: service_healthy
       relay-meter-db:
         condition: service_healthy
       relay-meter-collector:
