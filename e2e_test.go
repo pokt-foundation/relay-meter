@@ -331,8 +331,6 @@ func get[T any](options getOptions) (T, error) {
 
 	var data T
 
-	fmt.Println("URL HERE", rawURL)
-
 	response, err := options.httpClient.Get(rawURL, headers)
 	if err != nil {
 		return data, err
