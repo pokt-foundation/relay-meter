@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -258,6 +260,18 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	return nil
 }
 
+func Plog(args ...interface{}) {
+	for _, arg := range args {
+		var prettyJSON bytes.Buffer
+		jsonArg, _ := json.Marshal(arg)
+		str := string(jsonArg)
+		_ = json.Indent(&prettyJSON, []byte(str), "", "    ")
+		output := prettyJSON.String()
+
+		fmt.Println(output)
+	}
+}
+
 // TODO: add a cache library, e.g. bigcache, if necessary (a cache library may not be needed, as we have a few thousand apps, for a maximum of 30 days)
 // Notes on To and From parameters:
 // Both parameters are assumed to be in the same timezone as the source of the data
@@ -284,6 +298,8 @@ func (r *relayMeter) AppRelays(ctx context.Context, appPubKey types.PortalAppPub
 
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
+
+	Plog("DAYLY USAGE", r.dailyUsage)
 
 	var total RelayCounts
 	for day, counts := range r.dailyUsage {

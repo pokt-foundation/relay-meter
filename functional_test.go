@@ -48,7 +48,15 @@ func Test_RunSuite_Functional(t *testing.T) {
 }
 
 func (ts *RelayMeterFunctionalTestSuite) Test_TodayAllRelayApps() {
-	allAppsRelays, err := get[[]api.AppRelaysResponse](ts.options.relayMeterURL, "v1/relays/apps", "", ts.todayDate, ts.options.relayMeterAPIKey, ts.httpClient)
+	allAppsRelays, err := get[[]api.AppRelaysResponse](
+		getOptions{
+			baseURL:    ts.options.relayMeterURL,
+			apiKey:     ts.options.relayMeterAPIKey,
+			path:       "v1/relays/apps",
+			id:         "",
+			params:     ts.todayDate,
+			httpClient: ts.httpClient,
+		})
 	ts.NoError(err)
 
 	allZero := true
@@ -64,7 +72,15 @@ func (ts *RelayMeterFunctionalTestSuite) Test_TodayAllRelayApps() {
 }
 
 func (ts *RelayMeterFunctionalTestSuite) Test_YesterdayAllRelayApps() {
-	allAppsRelays, err := get[[]api.AppRelaysResponse](ts.options.relayMeterURL, "v1/relays/apps", "", ts.yesterdayDate, ts.options.relayMeterAPIKey, ts.httpClient)
+	allAppsRelays, err := get[[]api.AppRelaysResponse](
+		getOptions{
+			baseURL:    ts.options.relayMeterURL,
+			apiKey:     ts.options.relayMeterAPIKey,
+			path:       "v1/relays/apps",
+			id:         "",
+			params:     ts.yesterdayDate,
+			httpClient: ts.httpClient,
+		})
 	ts.NoError(err)
 
 	allZero := true
