@@ -8,8 +8,8 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/jackc/pgx/v4 v4.18.1
 	github.com/lib/pq v1.10.7
-	github.com/pokt-foundation/db-client v1.7.1
-	github.com/pokt-foundation/portal-db v1.10.8
+	github.com/pokt-foundation/db-client/v2 v2.1.0
+	github.com/pokt-foundation/portal-db/v2 v2.0.0-rc.11
 	github.com/pokt-foundation/utils-go v0.4.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.1
@@ -19,8 +19,6 @@ require (
 	cloud.google.com/go/compute v1.19.3 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/gojek/heimdall/v7 v7.0.2 // indirect
-	github.com/gojek/valkyrie v0.0.0-20180215180059-6aee720afcdf // indirect
 	github.com/gojektech/valkyrie v0.0.0-20190210220504-8f62c1e7ba45 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect

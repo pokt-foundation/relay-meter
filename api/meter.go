@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -9,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pokt-foundation/portal-db/types"
+	"github.com/pokt-foundation/portal-db/v2/types"
 	logger "github.com/sirupsen/logrus"
 )
 
@@ -24,24 +26,24 @@ const (
 )
 
 var (
-	ErrLoadBalancerNotFound = errors.New("loadbalancer/endpoint not found")
-	ErrAppLatencyNotFound   = errors.New("app latency not found")
+	ErrPortalAppNotFound  = errors.New("PortalApp/portalAppID not found")
+	ErrAppLatencyNotFound = errors.New("app latency not found")
 )
 
 type RelayMeter interface {
 	// AppRelays returns total number of relays for the app over the specified time period
-	AppRelays(ctx context.Context, app string, from, to time.Time) (AppRelaysResponse, error)
+	AppRelays(ctx context.Context, appPubKey types.PortalAppPublicKey, from, to time.Time) (AppRelaysResponse, error)
 	AllAppsRelays(ctx context.Context, from, to time.Time) ([]AppRelaysResponse, error)
-	UserRelays(ctx context.Context, user string, from, to time.Time) (UserRelaysResponse, error)
+	UserRelays(ctx context.Context, user types.UserID, from, to time.Time) (UserRelaysResponse, error)
 	TotalRelays(ctx context.Context, from, to time.Time) (TotalRelaysResponse, error)
 
-	// LoadBalancerRelays returns the metrics for an Endpoint, AKA loadbalancer
-	LoadBalancerRelays(ctx context.Context, endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error)
-	AllLoadBalancersRelays(ctx context.Context, from, to time.Time) ([]LoadBalancerRelaysResponse, error)
-	AppLatency(ctx context.Context, app string) (AppLatencyResponse, error)
+	// PortalAppRelays returns the metrics for a Portal
+	PortalAppRelays(ctx context.Context, portalAppID types.PortalAppID, from, to time.Time) (PortalAppRelaysResponse, error)
+	AllPortalAppsRelays(ctx context.Context, from, to time.Time) ([]PortalAppRelaysResponse, error)
+	AppLatency(ctx context.Context, appPubKey types.PortalAppPublicKey) (AppLatencyResponse, error)
 	AllAppsLatencies(ctx context.Context) ([]AppLatencyResponse, error)
 	AllRelaysOrigin(ctx context.Context, from, to time.Time) ([]OriginClassificationsResponse, error)
-	RelaysOrigin(ctx context.Context, origin string, from, to time.Time) (OriginClassificationsResponse, error)
+	RelaysOrigin(ctx context.Context, origin types.PortalAppOrigin, from, to time.Time) (OriginClassificationsResponse, error)
 
 	WriteHTTPSourceRelayCounts(ctx context.Context, counts []HTTPSourceRelayCount) error
 }
@@ -58,46 +60,46 @@ type Latency struct {
 
 // TODO: refactor common fields
 type AppRelaysResponse struct {
-	Count       RelayCounts
-	From        time.Time
-	To          time.Time
-	Application string
+	Count     RelayCounts              `json:"Count"`
+	From      time.Time                `json:"From"`
+	To        time.Time                `json:"To"`
+	PublicKey types.PortalAppPublicKey `json:"Application"`
 }
 
 type AppLatencyResponse struct {
-	DailyLatency []Latency
-	From         time.Time
-	To           time.Time
-	Application  string
+	DailyLatency []Latency                `json:"DailyLatency"`
+	From         time.Time                `json:"From"`
+	To           time.Time                `json:"To"`
+	PublicKey    types.PortalAppPublicKey `json:"Application"`
 }
 
 type OriginClassificationsResponse struct {
-	Count  RelayCounts
-	From   time.Time
-	To     time.Time
-	Origin string
+	Count  RelayCounts           `json:"Count"`
+	From   time.Time             `json:"From"`
+	To     time.Time             `json:"To"`
+	Origin types.PortalAppOrigin `json:"Origin"`
 }
 
 type UserRelaysResponse struct {
-	Count        RelayCounts
-	From         time.Time
-	To           time.Time
-	User         string
-	Applications []string
+	Count      RelayCounts                `json:"Count"`
+	From       time.Time                  `json:"From"`
+	To         time.Time                  `json:"To"`
+	User       types.UserID               `json:"User"`
+	PublicKeys []types.PortalAppPublicKey `json:"Applications"`
 }
 
 type TotalRelaysResponse struct {
-	Count RelayCounts
-	From  time.Time
-	To    time.Time
+	Count RelayCounts `json:"Count"`
+	From  time.Time   `json:"From"`
+	To    time.Time   `json:"To"`
 }
 
-type LoadBalancerRelaysResponse struct {
-	Count        RelayCounts
-	From         time.Time
-	To           time.Time
-	Endpoint     string
-	Applications []string
+type PortalAppRelaysResponse struct {
+	Count       RelayCounts                `json:"Count"`
+	From        time.Time                  `json:"From"`
+	To          time.Time                  `json:"To"`
+	PortalAppID types.PortalAppID          `json:"Endpoint"`
+	PublicKeys  []types.PortalAppPublicKey `json:"Applications"`
 }
 
 type RelayMeterOptions struct {
@@ -108,30 +110,30 @@ type RelayMeterOptions struct {
 }
 
 type HTTPSourceRelayCount struct {
-	AppPublicKey string    `json:"appPublicKey"`
-	Day          time.Time `json:"day"`
-	Success      int64     `json:"success"`
-	Error        int64     `json:"error"`
+	AppPublicKey types.PortalAppPublicKey `json:"appPublicKey"`
+	Day          time.Time                `json:"day"`
+	Success      int64                    `json:"success"`
+	Error        int64                    `json:"error"`
 }
 
 type HTTPSourceRelayCountInput struct {
-	AppPublicKey string `json:"appPublicKey"`
-	Success      int64  `json:"success"`
-	Error        int64  `json:"error"`
+	AppPublicKey types.PortalAppPublicKey `json:"appPublicKey"`
+	Success      int64                    `json:"success"`
+	Error        int64                    `json:"error"`
 }
 
 type Backend interface {
 	// TODO: reverse map keys order, i.e. map[app]-> map[day]RelayCounts, at PG level
-	DailyUsage(from, to time.Time) (map[time.Time]map[string]RelayCounts, error)
-	TodaysUsage() (map[string]RelayCounts, error)
-	TodaysLatency() (map[string][]Latency, error)
-	TodaysOriginUsage() (map[string]RelayCounts, error)
+	DailyUsage(from, to time.Time) (map[time.Time]map[types.PortalAppPublicKey]RelayCounts, error)
+	TodaysUsage() (map[types.PortalAppPublicKey]RelayCounts, error)
+	TodaysLatency() (map[types.PortalAppPublicKey][]Latency, error)
+	TodaysOriginUsage() (map[types.PortalAppOrigin]RelayCounts, error)
 
-	// Is expected to return the list of applicationIDs owned by the user
-	UserApps(ctx context.Context, user string) ([]string, error)
-	// LoadBalancer returns the full load balancer struct
-	LoadBalancer(ctx context.Context, endpoint string) (*types.LoadBalancer, error)
-	LoadBalancers(ctx context.Context) ([]*types.LoadBalancer, error)
+	// Is expected to return the list of portal app public keys owned by the user
+	UserPortalAppPubKeys(ctx context.Context, userID types.UserID) ([]types.PortalAppPublicKey, error)
+	// PortalApp returns the full portal app struct
+	PortalApp(ctx context.Context, portalAppID types.PortalAppID) (*types.PortalApp, error)
+	PortalApps(ctx context.Context) ([]*types.PortalApp, error)
 }
 
 type Driver interface {
@@ -158,10 +160,10 @@ type relayMeter struct {
 	Driver
 	*logger.Logger
 
-	dailyUsage        map[time.Time]map[string]RelayCounts
-	todaysUsage       map[string]RelayCounts
-	todaysOriginUsage map[string]RelayCounts
-	todaysLatency     map[string][]Latency
+	dailyUsage        map[time.Time]map[types.PortalAppPublicKey]RelayCounts
+	todaysUsage       map[types.PortalAppPublicKey]RelayCounts
+	todaysOriginUsage map[types.PortalAppOrigin]RelayCounts
+	todaysLatency     map[types.PortalAppPublicKey][]Latency
 
 	dailyTTL  time.Time
 	todaysTTL time.Time
@@ -182,11 +184,14 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	var updateDaily, updateToday bool
 
 	now := time.Now()
-	var dailyUsage map[time.Time]map[string]RelayCounts
-	var todaysUsage map[string]RelayCounts
-	var todaysOriginUsage map[string]RelayCounts
-	var todaysLatency map[string][]Latency
+
+	var dailyUsage map[time.Time]map[types.PortalAppPublicKey]RelayCounts
+	var todaysUsage map[types.PortalAppPublicKey]RelayCounts
+	var todaysOriginUsage map[types.PortalAppOrigin]RelayCounts
+	var todaysLatency map[types.PortalAppPublicKey][]Latency
+
 	var err error
+
 	noDataYet := r.isEmpty()
 
 	if noDataYet || now.After(r.dailyTTL) {
@@ -255,17 +260,29 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	return nil
 }
 
+func Plog(args ...interface{}) {
+	for _, arg := range args {
+		var prettyJSON bytes.Buffer
+		jsonArg, _ := json.Marshal(arg)
+		str := string(jsonArg)
+		_ = json.Indent(&prettyJSON, []byte(str), "", "    ")
+		output := prettyJSON.String()
+
+		fmt.Println(output)
+	}
+}
+
 // TODO: add a cache library, e.g. bigcache, if necessary (a cache library may not be needed, as we have a few thousand apps, for a maximum of 30 days)
 // Notes on To and From parameters:
-// Both parameters are assumed to be in the same timezone as the source of the data, i.e. influx
+// Both parameters are assumed to be in the same timezone as the source of the data
 //
 //	The From parameter is taken to mean the very start of the day that it specifies: the returned result includes all such relays
-func (r *relayMeter) AppRelays(ctx context.Context, app string, from, to time.Time) (AppRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"app": app, "from": from, "to": to}).Info("apiserver: Received AppRelays request")
+func (r *relayMeter) AppRelays(ctx context.Context, appPubKey types.PortalAppPublicKey, from, to time.Time) (AppRelaysResponse, error) {
+	r.Logger.WithFields(logger.Fields{"appPubKey": appPubKey, "from": from, "to": to}).Info("apiserver: Received AppRelays request")
 	resp := AppRelaysResponse{
-		From:        from,
-		To:          to,
-		Application: app,
+		From:      from,
+		To:        to,
+		PublicKey: appPubKey,
 	}
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -282,19 +299,21 @@ func (r *relayMeter) AppRelays(ctx context.Context, app string, from, to time.Ti
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
+	Plog("DAYLY USAGE", r.dailyUsage)
+
 	var total RelayCounts
 	for day, counts := range r.dailyUsage {
 		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
 		if (day.After(from) || day.Equal(from)) && day.Before(to) {
-			total.Success += counts[app].Success
-			total.Failure += counts[app].Failure
+			total.Success += counts[appPubKey].Success
+			total.Failure += counts[appPubKey].Failure
 		}
 	}
 
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
-		total.Success += r.todaysUsage[app].Success
-		total.Failure += r.todaysUsage[app].Failure
+		total.Success += r.todaysUsage[appPubKey].Success
+		total.Failure += r.todaysUsage[appPubKey].Failure
 	}
 
 	resp.Count = total
@@ -304,10 +323,10 @@ func (r *relayMeter) AppRelays(ctx context.Context, app string, from, to time.Ti
 	return resp, nil
 }
 
-func (r *relayMeter) AppLatency(ctx context.Context, app string) (AppLatencyResponse, error) {
-	r.Logger.WithFields(logger.Fields{"app": app}).Info("apiserver: Received AppLatency request")
+func (r *relayMeter) AppLatency(ctx context.Context, appPubKey types.PortalAppPublicKey) (AppLatencyResponse, error) {
+	r.Logger.WithFields(logger.Fields{"appPubKey": appPubKey}).Info("apiserver: Received AppLatency request")
 
-	appLatency := r.todaysLatency[app]
+	appLatency := r.todaysLatency[appPubKey]
 
 	if len(appLatency) == 0 {
 		return AppLatencyResponse{}, ErrAppLatencyNotFound
@@ -318,7 +337,7 @@ func (r *relayMeter) AppLatency(ctx context.Context, app string) (AppLatencyResp
 	})
 
 	return AppLatencyResponse{
-		Application:  app,
+		PublicKey:    appPubKey,
 		DailyLatency: appLatency,
 		From:         appLatency[0].Time,
 		To:           appLatency[len(appLatency)-1].Time,
@@ -330,14 +349,14 @@ func (r *relayMeter) AllAppsLatencies(ctx context.Context) ([]AppLatencyResponse
 
 	resp := []AppLatencyResponse{}
 
-	for app, appLatency := range r.todaysLatency {
+	for appPubKey, appLatency := range r.todaysLatency {
 		if len(appLatency) > 0 {
 			sort.Slice(appLatency, func(i, j int) bool {
 				return appLatency[i].Time.Before(appLatency[j].Time)
 			})
 
 			latencyResp := AppLatencyResponse{
-				Application:  app,
+				PublicKey:    appPubKey,
 				DailyLatency: appLatency,
 				From:         appLatency[0].Time,
 				To:           appLatency[len(appLatency)-1].Time,
@@ -367,11 +386,11 @@ func (r *relayMeter) AllAppsRelays(ctx context.Context, from, to time.Time) ([]A
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	rawResp := make(map[string]AppRelaysResponse)
+	rawResp := make(map[types.PortalAppPublicKey]AppRelaysResponse)
 
 	for day, counts := range r.dailyUsage {
-		for pubKey, relCounts := range counts {
-			total := rawResp[pubKey].Count
+		for appPubKey, relCounts := range counts {
+			total := rawResp[appPubKey].Count
 
 			// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
 			if (day.After(from) || day.Equal(from)) && day.Before(to) {
@@ -379,28 +398,28 @@ func (r *relayMeter) AllAppsRelays(ctx context.Context, from, to time.Time) ([]A
 				total.Failure += relCounts.Failure
 			}
 
-			rawResp[pubKey] = AppRelaysResponse{
-				Application: pubKey,
-				From:        from,
-				To:          to,
-				Count:       total,
+			rawResp[appPubKey] = AppRelaysResponse{
+				PublicKey: appPubKey,
+				From:      from,
+				To:        to,
+				Count:     total,
 			}
 		}
 	}
 
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
-		for pubKey, relCounts := range r.todaysUsage {
-			total := rawResp[pubKey].Count
+		for appPubKey, relCounts := range r.todaysUsage {
+			total := rawResp[appPubKey].Count
 
 			total.Success += relCounts.Success
 			total.Failure += relCounts.Failure
 
-			rawResp[pubKey] = AppRelaysResponse{
-				Application: pubKey,
-				From:        from,
-				To:          to,
-				Count:       total,
+			rawResp[appPubKey] = AppRelaysResponse{
+				PublicKey: appPubKey,
+				From:      from,
+				To:        to,
+				Count:     total,
 			}
 		}
 	}
@@ -431,7 +450,7 @@ func (r *relayMeter) AllRelaysOrigin(ctx context.Context, from, to time.Time) ([
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	rawResp := map[string]OriginClassificationsResponse{}
+	rawResp := map[types.PortalAppOrigin]OriginClassificationsResponse{}
 
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
@@ -454,7 +473,7 @@ func (r *relayMeter) AllRelaysOrigin(ctx context.Context, from, to time.Time) ([
 	return resp, nil
 }
 
-func (r *relayMeter) RelaysOrigin(ctx context.Context, origin string, from, to time.Time) (OriginClassificationsResponse, error) {
+func (r *relayMeter) RelaysOrigin(ctx context.Context, origin types.PortalAppOrigin, from, to time.Time) (OriginClassificationsResponse, error) {
 	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received classifications by origin request")
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -476,7 +495,7 @@ func (r *relayMeter) RelaysOrigin(ctx context.Context, origin string, from, to t
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
 		for curentOrigin, count := range r.todaysOriginUsage {
-			if strings.Contains(curentOrigin, origin) {
+			if strings.Contains(string(curentOrigin), string(origin)) {
 				resp = OriginClassificationsResponse{
 					Origin: origin,
 					Count:  count,
@@ -492,12 +511,12 @@ func (r *relayMeter) RelaysOrigin(ctx context.Context, origin string, from, to t
 }
 
 // TODO: refactor the common processing done by both AppRelays and UserRelays
-func (r *relayMeter) UserRelays(ctx context.Context, user string, from, to time.Time) (UserRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"user": user, "from": from, "to": to}).Info("apiserver: Received UserRelays request")
+func (r *relayMeter) UserRelays(ctx context.Context, userID types.UserID, from, to time.Time) (UserRelaysResponse, error) {
+	r.Logger.WithFields(logger.Fields{"userID": userID, "from": from, "to": to}).Info("apiserver: Received UserRelays request")
 	resp := UserRelaysResponse{
 		From: from,
 		To:   to,
-		User: user,
+		User: userID,
 	}
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -511,9 +530,9 @@ func (r *relayMeter) UserRelays(ctx context.Context, user string, from, to time.
 	now := time.Now()
 	_, today, _ := AdjustTimePeriod(now, now)
 
-	apps, err := r.Backend.UserApps(ctx, user)
+	appPubKeys, err := r.Backend.UserPortalAppPubKeys(ctx, userID)
 	if err != nil {
-		r.Logger.WithFields(logger.Fields{"user": user, "from": from, "to": to, "error": err}).Warn("Error getting user applications processing UserRelays request")
+		r.Logger.WithFields(logger.Fields{"userID": userID, "from": from, "to": to, "error": err}).Warn("Error getting user applications processing UserRelays request")
 		return resp, err
 	}
 
@@ -524,7 +543,7 @@ func (r *relayMeter) UserRelays(ctx context.Context, user string, from, to time.
 	for day, counts := range r.dailyUsage {
 		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
 		if (day.After(from) || day.Equal(from)) && day.Before(to) {
-			for _, app := range apps {
+			for _, app := range appPubKeys {
 				total.Success += counts[app].Success
 				total.Failure += counts[app].Failure
 			}
@@ -533,7 +552,7 @@ func (r *relayMeter) UserRelays(ctx context.Context, user string, from, to time.
 
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
-		for _, app := range apps {
+		for _, app := range appPubKeys {
 			total.Success += r.todaysUsage[app].Success
 			total.Failure += r.todaysUsage[app].Failure
 		}
@@ -542,7 +561,7 @@ func (r *relayMeter) UserRelays(ctx context.Context, user string, from, to time.
 	resp.Count = total
 	resp.From = from
 	resp.To = to
-	resp.Applications = apps
+	resp.PublicKeys = appPubKeys
 
 	return resp, nil
 }
@@ -594,13 +613,13 @@ func (r *relayMeter) TotalRelays(ctx context.Context, from, to time.Time) (Total
 	return resp, nil
 }
 
-// LoadBalancerRelays returns the metrics for all applications of a load balancer (AKA endpoint)
-func (r *relayMeter) LoadBalancerRelays(ctx context.Context, endpoint string, from, to time.Time) (LoadBalancerRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"endpoint": endpoint, "from": from, "to": to}).Info("apiserver: Received LoadBalancerRelays request")
-	resp := LoadBalancerRelaysResponse{
-		From:     from,
-		To:       to,
-		Endpoint: endpoint,
+// PortalAppRelays returns the metrics for all applications of a portal app (AKA portalAppID)
+func (r *relayMeter) PortalAppRelays(ctx context.Context, portalAppID types.PortalAppID, from, to time.Time) (PortalAppRelaysResponse, error) {
+	r.Logger.WithFields(logger.Fields{"portalAppID": portalAppID, "from": from, "to": to}).Info("apiserver: Received PortalAppRelays request")
+	resp := PortalAppRelaysResponse{
+		From:        from,
+		To:          to,
+		PortalAppID: portalAppID,
 	}
 
 	// TODO: enforce MaxArchiveAge on From parameter
@@ -614,20 +633,20 @@ func (r *relayMeter) LoadBalancerRelays(ctx context.Context, endpoint string, fr
 	now := time.Now()
 	_, today, _ := AdjustTimePeriod(now, now)
 
-	lb, err := r.Backend.LoadBalancer(ctx, endpoint)
+	portalApp, err := r.Backend.PortalApp(ctx, portalAppID)
 	if err != nil {
-		r.Logger.WithFields(logger.Fields{"endpoint": endpoint, "from": from, "to": to, "error": err}).Warn("Error getting endpoint/loadbalancer applications processing LoadBalancerRelays request")
+		r.Logger.WithFields(logger.Fields{"portalAppID": portalAppID, "from": from, "to": to, "error": err}).Warn("Error getting PortalApp processing PortalApp Relays request")
 		return resp, err
 	}
-	if lb == nil {
-		return resp, ErrLoadBalancerNotFound
+	if portalApp == nil {
+		return resp, ErrPortalAppNotFound
 	}
 
-	var apps []string
-	for _, app := range lb.Applications {
-		key := applicationPublicKey(app)
+	var appPubKeys []types.PortalAppPublicKey
+	for _, app := range portalApp.AATs {
+		key := aatPubKey(app)
 		if key != "" {
-			apps = append(apps, key)
+			appPubKeys = append(appPubKeys, key)
 		}
 	}
 
@@ -638,7 +657,7 @@ func (r *relayMeter) LoadBalancerRelays(ctx context.Context, endpoint string, fr
 	for day, counts := range r.dailyUsage {
 		// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
 		if (day.After(from) || day.Equal(from)) && day.Before(to) {
-			for _, app := range apps {
+			for _, app := range appPubKeys {
 				total.Success += counts[app].Success
 				total.Failure += counts[app].Failure
 			}
@@ -647,7 +666,7 @@ func (r *relayMeter) LoadBalancerRelays(ctx context.Context, endpoint string, fr
 
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
-		for _, app := range apps {
+		for _, app := range appPubKeys {
 			total.Success += r.todaysUsage[app].Success
 			total.Failure += r.todaysUsage[app].Failure
 		}
@@ -656,14 +675,14 @@ func (r *relayMeter) LoadBalancerRelays(ctx context.Context, endpoint string, fr
 	resp.Count = total
 	resp.From = from
 	resp.To = to
-	resp.Applications = apps
+	resp.PublicKeys = appPubKeys
 
 	return resp, nil
 }
 
-// AllLoadBalancersRelays returns the metrics for all applications of all load balancers (AKA endpoints)
-func (r *relayMeter) AllLoadBalancersRelays(ctx context.Context, from, to time.Time) ([]LoadBalancerRelaysResponse, error) {
-	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received AllLoadBalancerRelays request")
+// AllPortalAppsRelays returns the metrics for all applications of all portal apps (AKA portalAppIDs)
+func (r *relayMeter) AllPortalAppsRelays(ctx context.Context, from, to time.Time) ([]PortalAppRelaysResponse, error) {
+	r.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("apiserver: Received AllPortalAppRelays request")
 
 	// TODO: enforce MaxArchiveAge on From parameter
 	// TODO: enforce Today as maximum value for To parameter
@@ -676,55 +695,55 @@ func (r *relayMeter) AllLoadBalancersRelays(ctx context.Context, from, to time.T
 	now := time.Now()
 	_, today, _ := AdjustTimePeriod(now, now)
 
-	lbs, err := r.Backend.LoadBalancers(ctx)
+	portalApps, err := r.Backend.PortalApps(ctx)
 	if err != nil {
-		r.Logger.WithFields(logger.Fields{"from": from, "to": to, "error": err}).Warn("Error getting endpoint/loadbalancers applications processing AllLoadBalancerRelays request")
+		r.Logger.WithFields(logger.Fields{"from": from, "to": to, "error": err}).Warn("Error getting portalAppID/loadbalancers applications processing AllPortalAppRelays request")
 		return nil, err
 	}
 
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
 
-	rawResp := make(map[string]LoadBalancerRelaysResponse)
+	rawResp := make(map[types.PortalAppID]PortalAppRelaysResponse)
 
 	for day, counts := range r.dailyUsage {
-		for _, lb := range lbs {
-			total := rawResp[lb.ID].Count
+		for _, portalApp := range portalApps {
+			total := rawResp[portalApp.ID].Count
 
-			var apps []string
-			for _, app := range lb.Applications {
-				key := applicationPublicKey(app)
+			var appPubKeys []types.PortalAppPublicKey
+			for _, app := range portalApp.AATs {
+				key := aatPubKey(app)
 				if key != "" {
-					apps = append(apps, key)
+					appPubKeys = append(appPubKeys, key)
 				}
 			}
 
 			// Note: Equal is not tested for 'to' parameter, as it is already adjusted to the start of the day after the specified date.
 			if (day.After(from) || day.Equal(from)) && day.Before(to) {
-				for _, app := range apps {
-					total.Success += counts[app].Success
-					total.Failure += counts[app].Failure
+				for _, appPubKey := range appPubKeys {
+					total.Success += counts[appPubKey].Success
+					total.Failure += counts[appPubKey].Failure
 				}
 			}
 
-			rawResp[lb.ID] = LoadBalancerRelaysResponse{
-				Endpoint:     lb.ID,
-				From:         from,
-				To:           to,
-				Count:        total,
-				Applications: apps,
+			rawResp[portalApp.ID] = PortalAppRelaysResponse{
+				PortalAppID: portalApp.ID,
+				From:        from,
+				To:          to,
+				Count:       total,
+				PublicKeys:  appPubKeys,
 			}
 		}
 	}
 
 	// TODO: Add a 'Notes' []string field to output: to provide an explanation when the input 'from' or 'to' parameters are corrected.
 	if today.Equal(to) || today.Before(to) {
-		for _, lb := range lbs {
-			total := rawResp[lb.ID].Count
+		for _, portalApp := range portalApps {
+			total := rawResp[portalApp.ID].Count
 
-			var apps []string
-			for _, app := range lb.Applications {
-				key := applicationPublicKey(app)
+			var apps []types.PortalAppPublicKey
+			for _, app := range portalApp.AATs {
+				key := aatPubKey(app)
 				if key != "" {
 					apps = append(apps, key)
 				}
@@ -735,17 +754,17 @@ func (r *relayMeter) AllLoadBalancersRelays(ctx context.Context, from, to time.T
 				total.Failure += r.todaysUsage[app].Failure
 			}
 
-			rawResp[lb.ID] = LoadBalancerRelaysResponse{
-				Endpoint:     lb.ID,
-				From:         from,
-				To:           to,
-				Count:        total,
-				Applications: apps,
+			rawResp[portalApp.ID] = PortalAppRelaysResponse{
+				PortalAppID: portalApp.ID,
+				From:        from,
+				To:          to,
+				Count:       total,
+				PublicKeys:  apps,
 			}
 		}
 	}
 
-	resp := []LoadBalancerRelaysResponse{}
+	resp := []PortalAppRelaysResponse{}
 
 	for _, relResp := range rawResp {
 		resp = append(resp, relResp)
@@ -790,13 +809,6 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 			}
 		}
 	}(maxPastDays)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 // AdjustTimePeriod sets the two parameters, i.e. from and to, according to the following rules:
@@ -847,13 +859,12 @@ func maxArchiveAge(maxPastDays time.Duration) time.Duration {
 	return time.Duration(-1) * maxPastDays
 }
 
-func applicationPublicKey(app *types.Application) string {
-	if app == nil {
-		return ""
+func aatPubKey(appAAT types.AAT) types.PortalAppPublicKey {
+	portalAppKey := appAAT.PublicKey
+
+	if portalAppKey != "" {
+		return portalAppKey
 	}
-	appKey := app.GatewayAAT.ApplicationPublicKey
-	if appKey != "" {
-		return appKey
-	}
+
 	return ""
 }
