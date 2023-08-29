@@ -15,19 +15,18 @@ env:
   SERVER_REPO: relay-meter-server
 
 jobs:
-  # TODO Put Lint step back once golangci-lint changes addressed in separate PR
-  # lint:
-  #   name: Lint
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v2
-  #       with:
-  #         go-version: 1.18
-  #     - name: Check out code
-  #       uses: actions/checkout@v3
-  #     - name: Run Golang ci Action
-  #       uses: golangci/golangci-lint-action@v3
+  lint:
+    name: Lint
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.18
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Run Golang ci Action
+        uses: golangci/golangci-lint-action@v3
 
   test:
     name: Test
@@ -52,17 +51,16 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Run Unit tests
-        run: go test ./...  -short
+        run: make test_unit
 
       - name: Run Driver tests
         run: make test_driver
 
-      # TODO: enable e2e again after update
-      #- name: Build the Docker test stack
-      #  run: docker-compose -f ./testdata/docker-compose.test.yml up -d --build
+      - name: Build the Docker test stack
+        run: make test_env_up
 
-      #- name: Run E2E test
-      #  run: go test ./... -run E2E -count=1
+      - name: Run E2E test
+        run: make run_e2e_tests
 
   tag:
     name: Semantic Release Tag

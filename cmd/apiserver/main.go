@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -80,7 +79,9 @@ type backendProvider struct {
 }
 
 func (p *backendProvider) UserPortalAppPubKeys(ctx context.Context, userID types.UserID) ([]types.PortalAppPublicKey, error) {
-	userPortalApps, err := p.phd.GetPortalAppsByUser(ctx, userID, types.RoleOwner)
+	userPortalApps, err := p.phd.GetPortalAppsByUser(ctx, userID, phdClient.PortalAppOptions{
+		RoleNameFilters: []types.RoleName{types.RoleOwner},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -125,10 +126,7 @@ func main() {
 		TodaysMetricsTTL: time.Duration(options.todaysMetricsTTLSeconds) * time.Second,
 		MaxPastDays:      time.Duration(options.maxPastDays) * 24 * time.Hour,
 	}
-	logger.Info("Gathered options.",
-		slog.Group("postgresOptions", postgresOptions),
-		slog.Group("meterOptions", meterOptions),
-	)
+	logger.Info("gathered options")
 
 	/* Init Postgres Client */
 	dbInst, cleanup, err := db.NewDBConnection(postgresOptions)
@@ -164,7 +162,11 @@ func main() {
 	http.HandleFunc("/", api.GetHttpServer(ctx, meter, logger, options.relayMeterAPIKeys))
 
 	logger.Info("Starting the apiserver...")
-	http.ListenAndServe(fmt.Sprintf(":%d", options.port), nil)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", options.port), nil)
+	if err != nil {
+		logger.Error(fmt.Sprintf("http listen and serve failed with error: %s", err.Error()))
+		panic(err)
+	}
 
 	logger.Warn("Unexpected exit.")
 }

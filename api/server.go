@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pokt-foundation/portal-db/v2/types"
@@ -35,6 +36,8 @@ var (
 	appsLatencyPath         = regexp.MustCompile(`^/v1/latency/apps/([[:alnum:]|_]+)$`)
 	allAppsLatencyPath      = regexp.MustCompile(`^/v1/latency/apps`)
 	relayCountsPath         = regexp.MustCompile(`^/v1/relays/counts`)
+
+	mutex sync.Mutex
 )
 
 // TODO: move these custom error codes to the api package
@@ -156,7 +159,10 @@ func handleUploadRelayCounts(ctx context.Context, meter RelayMeter, l *logger.Lo
 		slog.Int("app_counts", len(counts)),
 	)
 
+	mutex.Lock() // prevent DB deadlock by blocking the request until the last one finishes
 	err = meter.WriteHTTPSourceRelayCounts(ctx, counts)
+	mutex.Unlock()
+
 	if err != nil {
 		l.Warn("Error on DB",
 			slog.String("error", err.Error()),

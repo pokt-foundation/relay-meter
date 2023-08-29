@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -59,46 +61,46 @@ type Latency struct {
 
 // TODO: refactor common fields
 type AppRelaysResponse struct {
-	Count     RelayCounts
-	From      time.Time
-	To        time.Time
-	PublicKey types.PortalAppPublicKey
+	Count     RelayCounts              `json:"Count"`
+	From      time.Time                `json:"From"`
+	To        time.Time                `json:"To"`
+	PublicKey types.PortalAppPublicKey `json:"Application"`
 }
 
 type AppLatencyResponse struct {
-	DailyLatency []Latency
-	From         time.Time
-	To           time.Time
-	PublicKey    types.PortalAppPublicKey
+	DailyLatency []Latency                `json:"DailyLatency"`
+	From         time.Time                `json:"From"`
+	To           time.Time                `json:"To"`
+	PublicKey    types.PortalAppPublicKey `json:"Application"`
 }
 
 type OriginClassificationsResponse struct {
-	Count  RelayCounts
-	From   time.Time
-	To     time.Time
-	Origin types.PortalAppOrigin
+	Count  RelayCounts           `json:"Count"`
+	From   time.Time             `json:"From"`
+	To     time.Time             `json:"To"`
+	Origin types.PortalAppOrigin `json:"Origin"`
 }
 
 type UserRelaysResponse struct {
-	Count      RelayCounts
-	From       time.Time
-	To         time.Time
-	User       types.UserID
-	PublicKeys []types.PortalAppPublicKey
+	Count      RelayCounts                `json:"Count"`
+	From       time.Time                  `json:"From"`
+	To         time.Time                  `json:"To"`
+	User       types.UserID               `json:"User"`
+	PublicKeys []types.PortalAppPublicKey `json:"Applications"`
 }
 
 type TotalRelaysResponse struct {
-	Count RelayCounts
-	From  time.Time
-	To    time.Time
+	Count RelayCounts `json:"Count"`
+	From  time.Time   `json:"From"`
+	To    time.Time   `json:"To"`
 }
 
 type PortalAppRelaysResponse struct {
-	Count       RelayCounts
-	From        time.Time
-	To          time.Time
-	PortalAppID types.PortalAppID
-	PublicKeys  []types.PortalAppPublicKey
+	Count       RelayCounts                `json:"Count"`
+	From        time.Time                  `json:"From"`
+	To          time.Time                  `json:"To"`
+	PortalAppID types.PortalAppID          `json:"Endpoint"`
+	PublicKeys  []types.PortalAppPublicKey `json:"Applications"`
 }
 
 type RelayMeterOptions struct {
@@ -273,9 +275,21 @@ func (r *relayMeter) loadData(from, to time.Time) error {
 	return nil
 }
 
+func Plog(args ...interface{}) {
+	for _, arg := range args {
+		var prettyJSON bytes.Buffer
+		jsonArg, _ := json.Marshal(arg)
+		str := string(jsonArg)
+		_ = json.Indent(&prettyJSON, []byte(str), "", "    ")
+		output := prettyJSON.String()
+
+		fmt.Println(output)
+	}
+}
+
 // TODO: add a cache library, e.g. bigcache, if necessary (a cache library may not be needed, as we have a few thousand apps, for a maximum of 30 days)
 // Notes on To and From parameters:
-// Both parameters are assumed to be in the same timezone as the source of the data, i.e. influx
+// Both parameters are assumed to be in the same timezone as the source of the data
 //
 //	The From parameter is taken to mean the very start of the day that it specifies: the returned result includes all such relays
 func (r *relayMeter) AppRelays(ctx context.Context, appPubKey types.PortalAppPublicKey, from, to time.Time) (AppRelaysResponse, error) {
@@ -303,6 +317,8 @@ func (r *relayMeter) AppRelays(ctx context.Context, appPubKey types.PortalAppPub
 
 	r.rwMutex.RLock()
 	defer r.rwMutex.RUnlock()
+
+	Plog("DAYLY USAGE", r.dailyUsage)
 
 	var total RelayCounts
 	for day, counts := range r.dailyUsage {
@@ -553,7 +569,6 @@ func (r *relayMeter) UserRelays(ctx context.Context, userID types.UserID, from, 
 		r.Logger.Warn("Error getting user applications processing UserRelays request",
 			slog.String("error", err.Error()),
 			slog.String("userID", string(userID)),
-			slog.Time("from", from),
 			slog.Time("to", to),
 		)
 		return resp, err
@@ -860,13 +875,6 @@ func (r *relayMeter) StartDataLoader(ctx context.Context) {
 			}
 		}
 	}(maxPastDays)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 // AdjustTimePeriod sets the two parameters, i.e. from and to, according to the following rules:
