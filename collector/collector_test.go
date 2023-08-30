@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
-	logger "github.com/sirupsen/logrus"
-
 	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
+	"github.com/pokt-foundation/utils-go/logger"
 )
 
 func TestCollect(t *testing.T) {

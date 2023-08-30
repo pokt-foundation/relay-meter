@@ -14,7 +14,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pokt-foundation/portal-db/v2/types"
-	logger "github.com/sirupsen/logrus"
+	"github.com/pokt-foundation/utils-go/logger"
 )
 
 func TestGetHttpServer(t *testing.T) {

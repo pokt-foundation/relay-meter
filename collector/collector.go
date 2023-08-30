@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
-
-	logger "github.com/sirupsen/logrus"
 
 	"github.com/pokt-foundation/portal-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
+	"github.com/pokt-foundation/utils-go/logger"
 )
 
 const (
@@ -70,12 +70,18 @@ type collector struct {
 //
 //	-
 func (c *collector) CollectDailyUsage(from, to time.Time) error {
-	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Starting daily metrics collection...")
+	c.Logger.Info("Starting daily metrics collection...",
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 	from, to, err := api.AdjustTimePeriod(from, to)
 	if err != nil {
 		return err
 	}
-	c.Logger.WithFields(logger.Fields{"from": from, "to": to}).Info("Daily metrics collection period adjusted.")
+	c.Logger.Info("Daily metrics collection period adjusted.",
+		slog.Time("from", from),
+		slog.Time("to", to),
+	)
 
 	var sourcesCounts []map[time.Time]map[types.PortalAppPublicKey]api.RelayCounts
 
@@ -84,7 +90,12 @@ func (c *collector) CollectDailyUsage(from, to time.Time) error {
 		if err != nil {
 			return err
 		}
-		c.Logger.WithFields(logger.Fields{"daily_metrics_count": len(sourceCounts), "from": from, "to": to, "source": source.Name()}).Info("Collected daily metrics")
+		c.Logger.Info("Collected daily metrics",
+			slog.Int("daily_metrics_count", len(sourceCounts)),
+			slog.String("source", source.Name()),
+			slog.Time("from", from),
+			slog.Time("to", to),
+		)
 		sourcesCounts = append(sourcesCounts, sourceCounts)
 	}
 
@@ -103,23 +114,36 @@ func (c *collector) collectTodaysUsage() error {
 	for _, source := range c.Sources {
 		sourceTodaysCounts, err := source.TodaysCounts()
 		if err != nil {
-			c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily counts")
+			c.Logger.Warn("Failed to collect daily counts",
+				slog.String("error", err.Error()),
+			)
 		}
-		c.Logger.WithFields(logger.Fields{"todays_usage_count": len(sourceTodaysCounts), "source": source.Name()}).Info("Collected todays usage")
+		c.Logger.Info("Collected todays usage",
+			slog.Int("todays_usage_count", len(sourceTodaysCounts)),
+			slog.String("source", source.Name()),
+		)
 		sourcesTodaysCounts = append(sourcesTodaysCounts, sourceTodaysCounts)
 
 		sourceTodaysRelaysInOrigin, err := source.TodaysCountsPerOrigin()
 		if err != nil {
 			return err
 		}
-		c.Logger.WithFields(logger.Fields{"todays_metrics_count_per_origin": len(sourceTodaysRelaysInOrigin), "source": source.Name()}).Info("Collected todays metrics")
+		c.Logger.Info("Collected todays metrics",
+			slog.Int("todays_metrics_count_per_origin", len(sourceTodaysRelaysInOrigin)),
+			slog.String("source", source.Name()),
+		)
 		sourcesTodaysRelaysInOrigin = append(sourcesTodaysRelaysInOrigin, sourceTodaysRelaysInOrigin)
 
 		sourceTodaysLatency, err := source.TodaysLatency()
 		if err != nil {
-			c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect daily latencies")
+			c.Logger.Warn("Failed to collect daily latencies",
+				slog.String("error", err.Error()),
+			)
 		}
-		c.Logger.WithFields(logger.Fields{"todays_latencies_count": len(sourceTodaysLatency), "source": source.Name()}).Info("Collected todays latencies")
+		c.Logger.Info("Collected todays latencies",
+			slog.Int("todays_latencies_count", len(sourceTodaysLatency)),
+			slog.String("source", source.Name()),
+		)
 		sourcesTodaysLatency = append(sourcesTodaysLatency, sourceTodaysLatency)
 	}
 
@@ -132,7 +156,9 @@ func (c *collector) collectTodaysUsage() error {
 
 func (c *collector) collect() error {
 	if err := c.collectTodaysUsage(); err != nil {
-		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to write todays metrics")
+		c.Logger.Warn("Failed to write todays metrics",
+			slog.String("error", err.Error()),
+		)
 		return err
 	}
 
@@ -140,7 +166,10 @@ func (c *collector) collect() error {
 	if err != nil {
 		return err
 	}
-	c.Logger.WithFields(logger.Fields{"first": first, "last": last}).Info("Verified existing daily metrics")
+	c.Logger.Info("Verified existing daily metrics",
+		slog.Time("first", first),
+		slog.Time("last", last),
+	)
 
 	// We assume there are no gaps between stored metrics from start to end, so
 	// 	start collecting metrics after the last saved date
@@ -150,7 +179,10 @@ func (c *collector) collect() error {
 		return err
 	}
 	if last.Equal(today.AddDate(0, 0, -1)) || last.After(today.AddDate(0, 0, -1)) {
-		c.Logger.WithFields(logger.Fields{"today": today, "last_daily_collected": last}).Info("Last collected daily metric was yesterday, skipping daily metrics collection...")
+		c.Logger.Info("Last collected daily metric was yesterday, skipping daily metrics collection...",
+			slog.Time("today", today),
+			slog.Time("last_daily_collected", last),
+		)
 		return nil
 	}
 	var from time.Time
@@ -171,7 +203,9 @@ func (c *collector) Start(ctx context.Context, collectIntervalSeconds, reportInt
 	// Do an initial data collection, and then repeat on set intervals
 	c.Logger.Info("Starting initial data collection...")
 	if err := c.collect(); err != nil {
-		c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
+		c.Logger.Warn("Failed to collect data",
+			slog.String("error", err.Error()),
+		)
 	}
 	c.Logger.Info("Initial data collection completed.")
 
@@ -190,7 +224,9 @@ func (c *collector) Start(ctx context.Context, collectIntervalSeconds, reportInt
 		case <-collectTicker.C:
 			c.Logger.Info("Starting data collection...")
 			if err := c.collect(); err != nil {
-				c.Logger.WithFields(logger.Fields{"error": err}).Warn("Failed to collect data")
+				c.Logger.Warn("Failed to collect data",
+					slog.String("error", err.Error()),
+				)
 			}
 			c.Logger.Info("Data collection completed.")
 			remaining = collectIntervalSeconds

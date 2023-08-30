@@ -1,6 +1,6 @@
 module github.com/pokt-foundation/relay-meter
 
-go 1.18
+go 1.21
 
 require (
 	cloud.google.com/go/cloudsqlconn v1.3.0
@@ -8,10 +8,9 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/jackc/pgx/v4 v4.18.1
 	github.com/lib/pq v1.10.7
-	github.com/pokt-foundation/db-client/v2 v2.1.0
-	github.com/pokt-foundation/portal-db/v2 v2.0.0-rc.11
-	github.com/pokt-foundation/utils-go v0.4.1
-	github.com/sirupsen/logrus v1.9.0
+	github.com/pokt-foundation/db-client/v2 v2.9.0
+	github.com/pokt-foundation/portal-db/v2 v2.6.0
+	github.com/pokt-foundation/utils-go v0.9.0
 	github.com/stretchr/testify v1.8.1
 )
 
