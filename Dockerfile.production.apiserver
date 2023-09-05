@@ -10,4 +10,4 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -o bin/apiserver ./cmd/apiserver/main.g
 FROM alpine:3.18
 WORKDIR /app
 COPY --from=builder /go/src/github.com/pokt-foundation/relay-meter/bin/apiserver ./
-CMD ["/app/apiserver"]
+ENTRYPOINT ["/app/apiserver"]

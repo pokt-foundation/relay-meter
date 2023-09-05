@@ -10,4 +10,4 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -o bin/collector ./cmd/collector/main.g
 FROM alpine:3.18
 WORKDIR /app
 COPY --from=builder /go/src/github.com/pokt-foundation/relay-meter/bin/collector ./
-CMD ["/app/collector"]
+ENTRYPOINT ["/app/collector"]
