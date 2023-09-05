@@ -20,6 +20,7 @@ const (
 	DATE_LAYOUT    = time.RFC3339
 	PARAMETER_FROM = "from"
 	PARAMETER_TO   = "to"
+	HEALTH_CHECK_PATH string = "/healthz"
 )
 
 var (
@@ -281,7 +282,7 @@ func GetHttpServer(ctx context.Context, meter RelayMeter, l *logger.Logger, apiK
 		}
 
 		if req.Method == http.MethodGet {
-			if req.URL.Path == "/" {
+			if req.URL.Path == HEALTH_CHECK_PATH {
 				healthCheck(w, req)
 				return
 			}
