@@ -40,8 +40,10 @@ func TestGetHttpServer(t *testing.T) {
 		failAuth           bool
 	}{
 		{
-			name:               "Healthcheck",
-			url:                "http://relay-meter.pokt.network/",
+			name: "Healthcheck",
+			url: fmt.Sprintf("http://relay-meter.pokt.network%s",
+				HEALTH_CHECK_PATH,
+			),
 			method:             http.MethodGet,
 			expectedStatusCode: http.StatusOK,
 		},
@@ -143,7 +145,7 @@ func TestGetHttpServer(t *testing.T) {
 			}
 
 			if !tc.failAuth {
-				if tc.method == http.MethodGet && req.URL.Path != "/" {
+				if tc.method == http.MethodGet && req.URL.Path != HEALTH_CHECK_PATH {
 					body, _ := io.ReadAll(resp.Body)
 					var r AppRelaysResponse
 					if err := json.Unmarshal(body, &r); err != nil {
