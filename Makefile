@@ -15,9 +15,9 @@ test_env_up:
 	@echo "⏳ Waiting for relay-meter-db to be ready ..."
 	@attempts=0; until pg_isready -h localhost -p 5434 -U postgres >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
 	@[[ $$attempts -lt 5 ]] && echo "🐘 relay-meter-db is up ..." || (echo "❌ relay-meter-db failed to start" && make test_env_down >/dev/null && exit 1)
-	@echo "⏳ Performing health check on pocket-http-db ..."
+	@echo "⏳ Performing health check on portal-http-db ..."
 	@attempts=0; until curl -s http://localhost:8080/healthz >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
-	@[[ $$attempts -lt 5 ]] && echo "🖥️  pocket-http-db is online ..." || (echo "❌ pocket-http-db failed health check" && make test_env_down >/dev/null && exit 1)
+	@[[ $$attempts -lt 5 ]] && echo "🖥️  portal-http-db is online ..." || (echo "❌ portal-http-db failed health check" && make test_env_down >/dev/null && exit 1)
 	@echo "⏳ Waiting for portal-db to be ready ..."
 	@attempts=0; until pg_isready -h localhost -p 5432 -U postgres >/dev/null || [[ $$attempts -eq 5 ]]; do sleep 2; ((attempts++)); done
 	@[[ $$attempts -lt 5 ]] && echo "🐘 portal-db is up ..." || (echo "❌ portal-db failed to start" && make test_env_down >/dev/null && exit 1)
