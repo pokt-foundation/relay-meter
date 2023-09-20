@@ -19,7 +19,7 @@ services:
     depends_on:
       relay-meter-db:
         condition: service_healthy
-      pocket-http-db:
+      portal-http-db:
         condition: service_healthy
       portal-db:
         condition: service_healthy
@@ -38,7 +38,7 @@ services:
       POSTGRES_PASSWORD: pgpassword
       POSTGRES_DB: postgres
       POSTGRES_HOST: relay-meter-db:5434
-      BACKEND_API_URL: http://pocket-http-db:8080
+      BACKEND_API_URL: http://portal-http-db:8080
       BACKEND_API_TOKEN: test_api_key_6789
       POSTGRES_USE_PRIVATE: "n"
     depends_on:
@@ -46,7 +46,7 @@ services:
         condition: service_healthy
       relay-meter-collector:
         condition: service_started
-      pocket-http-db:
+      portal-http-db:
         condition: service_healthy
       portal-db:
         condition: service_healthy
@@ -68,15 +68,15 @@ services:
       interval: 5s
       retries: 5
     depends_on:
-      pocket-http-db:
+      portal-http-db:
         condition: service_healthy
       portal-db:
         condition: service_healthy
 
-  # Pocket HTTP DB Containers
-  pocket-http-db:
-    container_name: pocket-http-db
-    build: github.com/pokt-foundation/pocket-http-db.git#staging
+  # Portal HTTP DB Containers
+  portal-http-db:
+    container_name: portal-http-db
+    build: github.com/pokt-foundation/portal-http-db.git#staging
     ports:
       - "8080:8080"
     environment:
