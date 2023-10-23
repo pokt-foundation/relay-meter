@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/pokt-foundation/portal-db/v2/types"
+	"github.com/pokt-foundation/portal-http-db/v2/types"
 )
 
 const insertHTTPSourceRelayCount = `-- name: InsertHTTPSourceRelayCount :exec

@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	phdClient "github.com/pokt-foundation/db-client/v2/client"
-	"github.com/pokt-foundation/portal-db/v2/types"
+	phdClient "github.com/pokt-foundation/portal-http-db/v2/client"
+	"github.com/pokt-foundation/portal-http-db/v2/types"
 	"github.com/pokt-foundation/utils-go/environment"
 	"github.com/pokt-foundation/utils-go/logger"
 

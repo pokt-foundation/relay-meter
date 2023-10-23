@@ -8,9 +8,8 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/jackc/pgx/v4 v4.18.1
 	github.com/lib/pq v1.10.7
-	github.com/pokt-foundation/db-client/v2 v2.9.0
-	github.com/pokt-foundation/portal-db/v2 v2.6.0
-	github.com/pokt-foundation/utils-go v0.9.0
+	github.com/pokt-foundation/portal-http-db/v2 v2.4.1
+	github.com/pokt-foundation/utils-go v0.11.1
 	github.com/stretchr/testify v1.8.1
 )
 
@@ -33,6 +32,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/pgtype v1.14.0 // indirect
 	github.com/joho/godotenv v1.4.0 // indirect
+	github.com/kr/pretty v0.3.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
@@ -48,5 +48,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	google.golang.org/grpc v1.55.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -12,14 +12,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pokt-foundation/portal-db/v2/types"
+	"github.com/pokt-foundation/portal-http-db/v2/types"
 	"github.com/pokt-foundation/utils-go/logger"
 )
 
 const (
-	DATE_LAYOUT    = time.RFC3339
-	PARAMETER_FROM = "from"
-	PARAMETER_TO   = "to"
+	DATE_LAYOUT              = time.RFC3339
+	PARAMETER_FROM           = "from"
+	PARAMETER_TO             = "to"
 	HEALTH_CHECK_PATH string = "/healthz"
 )
 
