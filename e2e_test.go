@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gojektech/heimdall/httpclient"
-	"github.com/pokt-foundation/portal-db/v2/types"
+	"github.com/pokt-foundation/portal-http-db/v2/types"
 	"github.com/pokt-foundation/relay-meter/api"
 	timeUtils "github.com/pokt-foundation/utils-go/time"
 	"github.com/stretchr/testify/suite"

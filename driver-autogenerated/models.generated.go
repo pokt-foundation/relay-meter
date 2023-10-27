@@ -8,7 +8,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/pokt-foundation/portal-db/v2/types"
+	"github.com/pokt-foundation/portal-http-db/v2/types"
 )
 
 type DailyAppSum struct {
